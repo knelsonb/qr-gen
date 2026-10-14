@@ -216,7 +216,7 @@ export function render(state) {
   for (const finding of findings)
     li(list, finding.text, finding.level);
   showPayload(state, payload);
-  for (const button of document.querySelectorAll('#download-png, #download-svg, #copy-image, #share, #print, #copy-text, #bar-save, #bar-share'))
+  for (const button of document.querySelectorAll('[data-png-size], #download-custom, #download-svg, #copy-image, #share, #print, #copy-text, #bar-save, #bar-share'))
     button.disabled = code === null;
   $('announce').textContent = code ? 'Code updated' : '';
 }
@@ -259,12 +259,7 @@ export function sync(state) {
   }
   $('quiet-out').textContent = state.style.quiet;
   $('logo-out').textContent = Math.round(state.style.logoFraction * 100);
-  const sizes = $('png-size');
-  sizes.value = String(state.style.size);
-  if (sizes.selectedIndex < 0) {
-    sizes.value = '1024';
-    state.style.size = 1024;
-  }
+  $('custom-size').value = state.style.size;
   echoAddress(state);
 }
 
@@ -346,10 +341,6 @@ export function bind(state) {
       scheduleRender(state);
     });
   }
-  $('png-size').addEventListener('change', () => {
-    state.style.size = coerce(STYLE.size, $('png-size').value) ?? state.style.size;
-    saveStyle(state);
-  });
   $('show-password').addEventListener('click', () => {
     const field = $('f-password');
     const show = field.type === 'password';

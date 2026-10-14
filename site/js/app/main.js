@@ -2,6 +2,7 @@ import { defaultState, applySettings, parseFragment, hasContent, styleFromJson }
 import { bind, sync, render, offerLinkContent } from './ui.js';
 import { bindActions } from './actions.js';
 import { loadLogo } from './logo.js';
+import { showCount } from './counter.js';
 
 export const VERSION = '1.0.0';
 
@@ -30,6 +31,7 @@ bind(state);
 bindActions(state);
 sync(state);
 render(state);
+showCount();
 readFragment();
 window.addEventListener('hashchange', readFragment);
 

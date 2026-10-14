@@ -101,7 +101,7 @@ assert.equal(await text('scan-overall'), 'Good');
 assert.equal(await text('payload'), 'https://example.com/menu');
 assert.equal(await run("document.getElementById('preview').hidden"), false);
 assert.equal(await run("document.getElementById('preview').getAttribute('aria-label')"), 'QR code: link to example.com');
-await run("document.querySelector('#style-panel').open = true");
+await run("document.querySelector('#more-panel').open = true");
 await screenshot('desktop');
 await send('Emulation.setDeviceMetricsOverride', { width: 400, height: 900, deviceScaleFactor: 2, mobile: true });
 await settle();
@@ -113,7 +113,7 @@ await settle();
 await setInput('f-url', 'javascript:alert(1)');
 assert.match(await text('findings'), /runs code/);
 assert.equal(await run("document.getElementById('preview').hidden"), true);
-assert.equal(await run("document.getElementById('download-png').disabled"), true);
+assert.equal(await run("document.querySelector('[data-png-size=\"1024\"]').disabled"), true);
 
 // A look-alike host is warned about but still encoded.
 await setInput('f-url', 'https://paypal.com@evil.example/');
@@ -151,7 +151,7 @@ assert.equal(await text('error'), '');
 await click('input[name="type"][value="url"]');
 await setInput('f-url', 'https://qr.thetallkeith.com/smoke');
 await setInput('s-caption', 'Smoke test');
-await click('#download-png');
+await click('[data-png-size="1024"]');
 await click('#download-svg');
 await setInput('batch-text', 'https://example.com/1\nhttps://example.com/2\nWIFI:T:WPA;S:a;P:b;;');
 await click('#batch-svg');
@@ -191,11 +191,16 @@ assert.equal(await run("document.getElementById('s-caption').value"), '');
 await click('#forget');
 assert.equal(await run("document.getElementById('s-ecLevel').value"), 'M');
 assert.equal(await run("localStorage.getItem('qr-settings')"), null);
+assert.match(await text('count-line'), /^\d+ CODES MADE HERE/);
+await setInput('f-url', 'https://example.com/custom');
+await setInput('custom-size', '300');
+await click('#download-custom');
+await waitForDownloads(4);
 
 // A batch line with a script link is skipped, the rest are made.
 await setInput('batch-text', 'javascript:alert(1)\nhttps://example.com/ok');
 await click('#batch-svg');
-await waitForDownloads(4);
+await waitForDownloads(5);
 assert.match(await text('batch-status'), /Done: 1 codes\. Lines 1/);
 
 // No network requests after load except the page's own files.

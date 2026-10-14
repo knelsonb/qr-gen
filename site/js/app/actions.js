@@ -10,7 +10,9 @@ import { makeZip } from '../io/zip.js';
 import { download, slug } from '../io/download.js';
 import { serialize, defaultState, MAX_TEXT, MAX_FRAGMENT } from './state.js';
 import { inspectUrl } from '../payload/inspect.js';
-import { current, describe, render, sync, effectiveLevel } from './ui.js';
+import { current, describe, render, sync, effectiveLevel, saveStyle } from './ui.js';
+import { bumpCount } from './counter.js';
+import { coerce, STYLE } from './state.js';
 
 const $ = id => document.getElementById(id);
 const MAX_BATCH = 200;
@@ -70,28 +72,38 @@ function svgText(state, code) {
   });
 }
 
-async function savePng(state) {
+// `pixels` is remembered as the size Ctrl+S and the phone bar reuse.
+async function savePng(state, pixels = state.style.size, button = null) {
   const { code } = current();
   if (!code)
     return;
-  const button = $('download-png');
-  button.disabled = true;
-  button.textContent = 'Rendering…';
+  state.style.size = pixels;
+  saveStyle(state);
+  const label = button?.textContent;
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Rendering…';
+  }
   await new Promise(resolve => requestAnimationFrame(resolve));
   try {
-    download(await pngBlob(state, code, state.style.size), filename(state, 'png'));
+    download(await pngBlob(state, code, pixels), filename(state, 'png'));
+    bumpCount();
   } catch (err) {
     $('error').textContent = err.message;
   } finally {
-    button.disabled = false;
-    button.textContent = 'Download PNG';
+    if (button) {
+      button.disabled = false;
+      button.textContent = label;
+    }
   }
 }
 
 function saveSvg(state) {
   const { code } = current();
-  if (code)
-    download(new Blob([svgText(state, code)], { type: 'image/svg+xml' }), filename(state, 'svg'));
+  if (!code)
+    return;
+  download(new Blob([svgText(state, code)], { type: 'image/svg+xml' }), filename(state, 'svg'));
+  bumpCount();
 }
 
 async function copyImage(state) {
@@ -101,8 +113,9 @@ async function copyImage(state) {
   try {
     if (!('ClipboardItem' in window))
       throw new Error('no ClipboardItem');
-    const blob = await pngBlob(state, code, 1024);
-    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+    // Safari only allows the write inside the click, so the blob goes in as a promise.
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob(state, code, 1024) })]);
+    bumpCount();
     status('link-status', 'Image copied.');
   } catch {
     try {
@@ -136,6 +149,7 @@ async function share(state) {
     if (navigator.canShare && !navigator.canShare(data))
       throw new Error('cannot share files');
     await navigator.share(data);
+    bumpCount();
   } catch (err) {
     if (err.name !== 'AbortError')
       status('link-status', 'Sharing files is not available here. Download instead.');
@@ -202,6 +216,7 @@ function print(state) {
     area.append(card);
   }
   window.print();
+  bumpCount();
 }
 
 function clearPrintArea() {
@@ -252,8 +267,10 @@ async function batch(state, format) {
   }
   for (const button of buttons)
     button.disabled = false;
-  if (files.length > 0)
+  if (files.length > 0) {
     download(makeZip(files), 'qr-codes.zip');
+    bumpCount(files.length);
+  }
   status('batch-status', skipped.length ? `Done: ${files.length} codes. Lines ${skipped.join(', ')} were too long or were script links, and were skipped.` : `Done: ${files.length} codes.`);
 }
 
@@ -286,7 +303,17 @@ function forget(state) {
 }
 
 export function bindActions(state) {
-  $('download-png').addEventListener('click', () => savePng(state));
+  for (const button of document.querySelectorAll('[data-png-size]'))
+    button.addEventListener('click', () => savePng(state, Number(button.dataset.pngSize), button));
+  $('download-custom').addEventListener('click', () => {
+    const pixels = coerce(STYLE.size, $('custom-size').value);
+    if (pixels === undefined) {
+      status('link-status', 'Custom size: a whole number from 64 to 4096.');
+      return;
+    }
+    $('custom-size').value = pixels;
+    savePng(state, pixels, $('download-custom'));
+  });
   $('bar-save').addEventListener('click', () => savePng(state));
   $('download-svg').addEventListener('click', () => saveSvg(state));
   $('copy-image').addEventListener('click', () => copyImage(state));
@@ -297,6 +324,11 @@ export function bindActions(state) {
   $('batch-svg').addEventListener('click', () => batch(state, 'svg'));
   $('copy-link').addEventListener('click', () => copyLink(state));
   $('forget').addEventListener('click', () => forget(state));
+  $('about-open').addEventListener('click', () => {
+    const about = $('about');
+    about.open = true;
+    about.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
   $('bar-top').addEventListener('click', () => {
     const first = document.querySelector(`fieldset[data-type="${state.type}"] input, fieldset[data-type="${state.type}"] textarea`);
     (first ?? $('types')).scrollIntoView({ behavior: 'smooth', block: 'start' });
