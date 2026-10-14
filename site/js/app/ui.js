@@ -5,7 +5,7 @@ import { encode, CapacityError, capacityBits } from '../qr/encode.js';
 import { drawCode } from '../render/canvas.js';
 import { build } from '../payload/builders.js';
 import { inspect, revealControls } from '../payload/inspect.js';
-import { STYLE, FIELDS, TYPES, coerce, applySettings, styleToJson } from './state.js';
+import { STYLE, FIELDS, TYPES, MAX_TEXT, coerce, applySettings, styleToJson } from './state.js';
 import { assess } from './scannability.js';
 
 const $ = id => document.getElementById(id);
@@ -78,7 +78,15 @@ function showPayload(state, payload) {
       host = null;
     }
   }
-  const at = host ? shown.indexOf(host) : -1;
+  // The host is looked for inside the authority part only, after any user@, so a login that
+  // mimics a host name cannot steal the highlight.
+  let at = -1;
+  if (host) {
+    const start = shown.indexOf('://') + 3;
+    const end = shown.slice(start).search(/[/?#]|$/) + start;
+    const afterUser = shown.lastIndexOf('@', end) + 1;
+    at = shown.slice(0, end).toLowerCase().indexOf(host, Math.max(start, afterUser));
+  }
   if (at < 0) {
     pre.textContent = shown;
     return;
@@ -86,7 +94,7 @@ function showPayload(state, payload) {
   pre.append(shown.slice(0, at));
   const mark = document.createElement('span');
   mark.className = 'host';
-  mark.textContent = host;
+  mark.textContent = shown.slice(at, at + host.length);
   pre.append(mark, shown.slice(at + host.length));
 }
 
@@ -125,8 +133,10 @@ function showScannability(state, code) {
 }
 
 let detector = null;
+let checks = 0;
 async function selfCheck(payload) {
   const out = $('self-check');
+  const check = ++checks;
   if (!('BarcodeDetector' in window)) {
     out.textContent = '';
     return;
@@ -141,6 +151,8 @@ async function selfCheck(payload) {
       return;
     }
     const found = await detector.detect($('preview'));
+    if (check !== checks)
+      return;
     const ok = found.some(b => b.rawValue === payload);
     out.textContent = ok ? 'This browser reads the preview back correctly.' : 'This browser could not read the preview back. Try a phone before printing.';
   } catch {
@@ -148,7 +160,9 @@ async function selfCheck(payload) {
   }
 }
 
-function saveStyle(state) {
+// Called only from the controls, so settings that arrived in a link are not kept unless the
+// visitor goes on to change something.
+export function saveStyle(state) {
   try {
     localStorage.setItem('qr-settings', styleToJson(state));
   } catch {
@@ -205,7 +219,6 @@ export function render(state) {
   for (const button of document.querySelectorAll('#download-png, #download-svg, #copy-image, #share, #print, #copy-text, #bar-save, #bar-share'))
     button.disabled = code === null;
   $('announce').textContent = code ? 'Code updated' : '';
-  saveStyle(state);
 }
 
 let pending = false;
@@ -246,7 +259,12 @@ export function sync(state) {
   }
   $('quiet-out').textContent = state.style.quiet;
   $('logo-out').textContent = Math.round(state.style.logoFraction * 100);
-  $('png-size').value = String(state.style.size);
+  const sizes = $('png-size');
+  sizes.value = String(state.style.size);
+  if (sizes.selectedIndex < 0) {
+    sizes.value = '1024';
+    state.style.size = 1024;
+  }
   echoAddress(state);
 }
 
@@ -304,6 +322,8 @@ export function bind(state) {
     const kind = FIELDS[type][name];
     input.addEventListener('input', () => {
       state.fields[type][name] = input.type === 'checkbox' ? input.checked : coerce(kind, input.value) ?? state.fields[type][name];
+      if (kind === 'string' && input.value.length > MAX_TEXT)
+        input.value = state.fields[type][name];
       if (type === 'crypto')
         echoAddress(state);
       scheduleRender(state);
@@ -318,6 +338,7 @@ export function bind(state) {
       if (value === undefined)
         return;
       state.style[name] = value;
+      saveStyle(state);
       if (name === 'quiet')
         $('quiet-out').textContent = value;
       if (name === 'logoFraction')

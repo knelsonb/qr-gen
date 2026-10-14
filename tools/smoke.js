@@ -175,13 +175,28 @@ assert.equal(await run("document.getElementById('f-ssid').value"), 'Guest');
 assert.equal(await text('payload'), 'WIFI:T:WPA;S:Guest;P:pw;;');
 assert.equal(await run("document.getElementById('link-banner').hidden"), true);
 
-// Settings survive a reload, content does not.
+// Settings that arrived in a link are not kept; settings the visitor changes are, content is not.
+await send('Page.navigate', { url: 'about:blank' });
 await send('Page.navigate', { url: SITE });
 await new Promise(r => setTimeout(r, 800));
-assert.equal(await run("document.getElementById('s-ecLevel').value"), 'H');
+assert.equal(await run("document.getElementById('s-ecLevel').value"), 'M');
 assert.equal(await run("document.getElementById('f-ssid').value"), '');
+await setInput('s-ecLevel', 'Q');
+await setInput('s-caption', 'not kept');
+await send('Page.navigate', { url: 'about:blank' });
+await send('Page.navigate', { url: SITE });
+await new Promise(r => setTimeout(r, 800));
+assert.equal(await run("document.getElementById('s-ecLevel').value"), 'Q');
+assert.equal(await run("document.getElementById('s-caption').value"), '');
 await click('#forget');
 assert.equal(await run("document.getElementById('s-ecLevel').value"), 'M');
+assert.equal(await run("localStorage.getItem('qr-settings')"), null);
+
+// A batch line with a script link is skipped, the rest are made.
+await setInput('batch-text', 'javascript:alert(1)\nhttps://example.com/ok');
+await click('#batch-svg');
+await waitForDownloads(4);
+assert.match(await text('batch-status'), /Done: 1 codes\. Lines 1/);
 
 // No network requests after load except the page's own files.
 const requests = await run("performance.getEntriesByType('resource').map(e => new URL(e.name).origin).filter(o => o !== location.origin)");

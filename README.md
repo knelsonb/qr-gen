@@ -43,7 +43,7 @@ mask for the same input; both are valid codes.
 ## Settings link
 
 The fragment is `#v=1&type=<type>&<style keys>` with content fields as `f.<name>`. Unknown keys
-are ignored, numbers clamped, enums checked, strings cut at 4,000 characters, the whole thing
+are ignored, numbers clamped, enums checked, strings cut at 4,500 characters, the whole thing
 refused over 8,000. Content from a link is loaded only after the visitor clicks the banner.
 
 ## Deploy

@@ -48,17 +48,22 @@ self.addEventListener('activate', event => {
   );
 });
 
-// Same-origin files come from the cache, with the network copy refreshing it for next time.
+// Only the files listed above are served from the cache, and each is refreshed from the network
+// for next time. Anything else goes straight to the network.
 self.addEventListener('fetch', event => {
-  const url = new URL(event.request.url);
-  if (event.request.method !== 'GET' || url.origin !== self.location.origin)
+  const scope = self.registration.scope;
+  const url = event.request.url.split(/[?#]/)[0];
+  if (event.request.method !== 'GET' || !url.startsWith(scope))
+    return;
+  const path = url.slice(scope.length) || './';
+  if (!FILES.includes(path))
     return;
   event.respondWith(
     caches.open(CACHE).then(async cache => {
-      const cached = await cache.match(event.request);
-      const refresh = fetch(event.request).then(response => {
+      const cached = await cache.match(path);
+      const refresh = fetch(path, { cache: 'no-cache' }).then(response => {
         if (response.ok)
-          cache.put(event.request, response.clone());
+          event.waitUntil(cache.put(path, response.clone()));
         return response;
       }).catch(() => cached);
       return cached ?? refresh;

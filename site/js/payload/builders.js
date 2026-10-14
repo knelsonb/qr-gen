@@ -5,12 +5,20 @@ import { escapeWifi, escapeVcard, escapeMecard, escapeIcal, foldIcal } from './e
 
 const trim = value => String(value ?? '').trim();
 
+// Schemes that carry no // after them, so that host:port is still read as a host.
+const BARE_SCHEMES = ['mailto', 'tel', 'sms', 'smsto', 'geo', 'bitcoin', 'ethereum', 'javascript', 'data', 'vbscript', 'file', 'about', 'blob'];
+
 export function hasScheme(text) {
-  return /^[a-z][a-z0-9+.-]*:/i.test(text);
+  const match = text.match(/^([a-z][a-z0-9+.-]*):(\/\/)?/i);
+  if (!match)
+    return false;
+  return match[2] !== undefined || BARE_SCHEMES.includes(match[1].toLowerCase());
 }
 
+// Tabs and line breaks vanish inside a browser's URL parser, so they go here too, and the
+// inspector judges the same string a reader will see.
 export function url(f) {
-  const text = trim(f.url);
+  const text = trim(f.url).replace(/[\t\r\n]/g, '');
   if (text === '' || hasScheme(text))
     return text;
   return `https://${text}`;
@@ -122,35 +130,41 @@ export function sms(f) {
   return `SMSTO:${number}:${String(f.message ?? '')}`;
 }
 
+const DECIMAL = /^-?\d+(\.\d+)?$/;
+
 export function geo(f) {
-  const lat = Number(f.lat);
-  const lng = Number(f.lng);
-  if (trim(f.lat) === '' || trim(f.lng) === '' || !Number.isFinite(lat) || !Number.isFinite(lng))
+  const lat = Number(trim(f.lat));
+  const lng = Number(trim(f.lng));
+  if (!DECIMAL.test(trim(f.lat)) || !DECIMAL.test(trim(f.lng)) || Math.abs(lat) > 90 || Math.abs(lng) > 180)
     return '';
   if (f.format === 'geo')
     return `geo:${lat},${lng}`;
   return `https://www.google.com/maps/search/?api=1&query=${lat}%2C${lng}`;
 }
 
+// A date-time input's value as an iCalendar stamp, in UTC for timed events; null when it is
+// not a date.
 function icalStamp(local, allDay) {
   if (allDay)
-    return local.slice(0, 10).replace(/-/g, '');
+    return /^\d{4}-\d{2}-\d{2}/.test(local) ? local.slice(0, 10).replace(/-/g, '') : null;
   const date = new Date(local);
+  if (Number.isNaN(date.getTime()))
+    return null;
   return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
 }
 
 export function event(f) {
   const title = trim(f.title);
-  const start = trim(f.start);
-  if (title === '' || start === '')
-    return '';
   const allDay = Boolean(f.allDay);
+  const start = icalStamp(trim(f.start), allDay);
+  if (title === '' || start === null)
+    return '';
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//qr.thetallkeith.com//EN', 'BEGIN:VEVENT'];
   lines.push(`SUMMARY:${escapeIcal(title)}`);
-  lines.push(allDay ? `DTSTART;VALUE=DATE:${icalStamp(start, true)}` : `DTSTART:${icalStamp(start, false)}`);
-  const end = trim(f.end);
-  if (end)
-    lines.push(allDay ? `DTEND;VALUE=DATE:${icalStamp(end, true)}` : `DTEND:${icalStamp(end, false)}`);
+  lines.push(allDay ? `DTSTART;VALUE=DATE:${start}` : `DTSTART:${start}`);
+  const end = icalStamp(trim(f.end), allDay);
+  if (end !== null)
+    lines.push(allDay ? `DTEND;VALUE=DATE:${end}` : `DTEND:${end}`);
   if (trim(f.location)) lines.push(`LOCATION:${escapeIcal(trim(f.location))}`);
   if (trim(f.description)) lines.push(`DESCRIPTION:${escapeIcal(trim(f.description))}`);
   lines.push('END:VEVENT', 'END:VCALENDAR');
@@ -162,8 +176,9 @@ export function crypto(f) {
   if (address === '')
     return '';
   const coin = f.coin === 'ethereum' ? 'ethereum' : 'bitcoin';
+  // Wallets expect a plain decimal, so the amount goes out as typed once it is one.
   const amount = trim(f.amount);
-  const query = amount !== '' && Number.isFinite(Number(amount)) && Number(amount) > 0 ? `?amount=${Number(amount)}` : '';
+  const query = DECIMAL.test(amount) && Number(amount) > 0 ? `?amount=${amount}` : '';
   return `${coin}:${address}${query}`;
 }
 

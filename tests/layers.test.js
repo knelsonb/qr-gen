@@ -5,7 +5,7 @@ import { writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { encode } from '../site/js/qr/encode.js';
+import { encode, CapacityError } from '../site/js/qr/encode.js';
 import { toSvg, modulePath, escapeXml } from '../site/js/render/svg.js';
 import { toText } from '../site/js/render/text.js';
 import { build, wifi, vcard, mecard, event, email, sms, url } from '../site/js/payload/builders.js';
@@ -172,13 +172,48 @@ test('hostile fragments are clamped or ignored', () => {
   assert.equal(state.style.dark, '#000000');
   assert.equal(state.style.ecLevel, 'M');
   assert.equal(state.type, 'url');
-  assert.equal(state.style.caption.length, 4000);
+  assert.equal(state.style.caption.length, 4500);
   assert.equal(state.style.logoFraction, 0.2);
   assert.equal(parseFragment(`#${'a'.repeat(9000)}`), null);
   assert.equal(parseFragment('#type=url'), null);
   assert.deepEqual(styleFromJson(defaultState(), '{"__proto__":{"x":1},"quiet":"3"}').style.quiet, 3);
   assert.deepEqual(styleFromJson(defaultState(), 'not json'), defaultState());
   assert.equal(styleFromJson(defaultState(), styleToJson(defaultState())).style.size, 1024);
+});
+
+test('review fixes: schemes, dates, amounts, coordinates, slugs, stored style', () => {
+  assert.equal(url({ url: 'example.com:8443/x' }), 'https://example.com:8443/x');
+  assert.equal(url({ url: 'localhost:3000' }), 'https://localhost:3000');
+  assert.equal(url({ url: 'mailto:a@b.co' }), 'mailto:a@b.co');
+  assert.equal(url({ url: 'https://exa\tmple.com/\n' }), 'https://example.com/');
+  assert.ok(inspectUrl('ftp://files.example/').some(f => f.level === 'warn'));
+  assert.ok(inspectUrl('https://bit.ly./abc').some(f => f.level === 'info'));
+  assert.ok(inspect('text', '  javascript:alert(1)').some(f => f.level === 'block'));
+  assert.equal(event({ title: 'x', start: 'garbage' }), '');
+  assert.equal(event({ title: 'x', start: '2026/10/13', allDay: true }), '');
+  assert.ok(!event({ title: 'x', start: '2026-10-13T10:00', end: 'nope' }).includes('DTEND'));
+  assert.equal(build('crypto', { coin: 'bitcoin', address: 'bc1q', amount: '0.0000001' }), 'bitcoin:bc1q?amount=0.0000001');
+  assert.equal(build('crypto', { coin: 'bitcoin', address: 'bc1q', amount: '1e3' }), 'bitcoin:bc1q');
+  assert.equal(build('geo', { lat: '999', lng: '0', format: 'geo' }), '');
+  assert.equal(build('geo', { lat: '0x1A', lng: '0', format: 'geo' }), '');
+  assert.equal(build('geo', { lat: '51.5', lng: '-0.12', format: 'geo' }), 'geo:51.5,-0.12');
+  assert.equal(slug('ÉCOLE  café'), 'ecole-cafe');
+  const state = defaultState();
+  state.style.caption = 'secret name';
+  assert.ok(!styleToJson(state).includes('secret'));
+  assert.equal(applySettings(defaultState(), () => '', {}).style.size, 1024);
+});
+
+test('encoder rejects bad options and takes raw bytes', () => {
+  assert.throws(() => encode('x', { minVersion: 1.5 }), RangeError);
+  assert.throws(() => encode('x', { maxVersion: '40' }), RangeError);
+  assert.throws(() => encode('x', { mask: 2.5 }), RangeError);
+  assert.throws(() => encode('x', { mode: 'foo' }), RangeError);
+  assert.throws(() => encode('漢字', { mode: 'kanji', eci: true }), RangeError);
+  assert.deepEqual(encode('漢字', { eci: true }).segments.map(s => s.mode), ['byte']);
+  const bytes = encode(new Uint8Array([0, 255, 72, 105]));
+  assert.deepEqual(bytes.segments, [{ mode: 'byte', charCount: 4, bits: 32 }]);
+  assert.throws(() => encode('x'.repeat(300), { maxVersion: 9 }), err => err instanceof CapacityError && Number.isFinite(err.neededBits));
 });
 
 test('scannability rates contrast, border, print size and logo', () => {

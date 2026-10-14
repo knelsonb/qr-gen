@@ -2,6 +2,8 @@
 // are hints for the person making the code; none of them proves a link safe or unsafe.
 
 const SHORTENERS = ['bit.ly', 't.co', 'tinyurl.com', 'goo.gl', 'ow.ly', 'is.gd', 'buff.ly', 'cutt.ly', 'rb.gy', 'tiny.cc'];
+const BLOCKED_SCHEMES = ['javascript', 'data', 'vbscript', 'file'];
+const KNOWN_SCHEMES = ['http', 'https', 'mailto', 'tel', 'sms', 'smsto', 'geo', 'bitcoin', 'ethereum'];
 
 function hostScripts(host) {
   const scripts = new Set();
@@ -16,8 +18,12 @@ export function inspectUrl(text) {
   const scheme = (text.match(/^([a-z][a-z0-9+.-]*):/i) || [])[1]?.toLowerCase();
   if (!scheme)
     return findings;
-  if (['javascript', 'data', 'vbscript', 'file'].includes(scheme)) {
+  if (BLOCKED_SCHEMES.includes(scheme)) {
     findings.push({ level: 'block', text: `A ${scheme}: link runs code or opens a file instead of a web page. Readers refuse these, and so does this page.` });
+    return findings;
+  }
+  if (!KNOWN_SCHEMES.includes(scheme)) {
+    findings.push({ level: 'warn', text: `${scheme}: is not a web link. Most phones will show it as text and do nothing with it.` });
     return findings;
   }
   if (scheme !== 'http' && scheme !== 'https')
@@ -39,7 +45,7 @@ export function inspectUrl(text) {
     findings.push({ level: 'warn', text: `The host ${parsed.hostname} is an internationalised name in its encoded form. Make sure it is the site you mean.` });
   if (hostScripts(parsed.hostname).size > 1)
     findings.push({ level: 'warn', text: 'The host mixes alphabets, which is how look-alike domains are made.' });
-  if (SHORTENERS.includes(parsed.hostname.replace(/^www\./, '')))
+  if (SHORTENERS.includes(parsed.hostname.replace(/^www\./, '').replace(/\.$/, '')))
     findings.push({ level: 'info', text: 'A shortener hides the destination until scanned, and stops working if the service does. A direct link is better on print.' });
   if (!parsed.hostname.includes('.') && parsed.hostname !== 'localhost')
     findings.push({ level: 'warn', text: 'The host has no dot in it, so phones will not treat it as a website.' });
@@ -59,6 +65,8 @@ export function inspect(type, payload) {
     return findings;
   if (type === 'url')
     findings.push(...inspectUrl(payload));
+  if (type === 'text' && new RegExp(`^(${BLOCKED_SCHEMES.join('|')}):`, 'i').test(payload.trim()))
+    findings.push({ level: 'block', text: 'This starts like a script or file link. Readers refuse those, and so does this page.' });
   if (type === 'wifi' && /;P:/.test(payload))
     findings.push({ level: 'info', text: 'The network password is in the code in plain text. Anyone who scans it can join.' });
   if (type === 'contact')

@@ -76,15 +76,23 @@ function chooseMask(matrix, level, forced) {
   return best;
 }
 
+const MODE_NAMES = ['auto', 'numeric', 'alphanumeric', 'byte', 'kanji'];
+
 function checkOptions(o) {
   if (!EC_LEVELS.includes(o.ecLevel))
     throw new RangeError(`Unknown error-correction level ${o.ecLevel}`);
-  if (!(o.minVersion >= 1 && o.maxVersion <= 40 && o.minVersion <= o.maxVersion))
-    throw new RangeError('Version range must lie within 1 to 40');
+  const whole = [o.minVersion, o.maxVersion, o.mask].every(Number.isInteger);
+  if (!whole || !(o.minVersion >= 1 && o.maxVersion <= 40 && o.minVersion <= o.maxVersion))
+    throw new RangeError('Version range must be whole numbers within 1 to 40');
   if (!(o.mask >= -1 && o.mask <= 7))
     throw new RangeError('Mask must be -1 or 0 to 7');
+  if (!MODE_NAMES.includes(o.mode))
+    throw new RangeError(`Unknown mode ${o.mode}`);
+  if (o.eci && o.mode === 'kanji')
+    throw new RangeError('Kanji mode is Shift JIS and cannot sit under a UTF-8 ECI header');
 }
 
+// `text` is a string, or a Uint8Array to be carried as raw bytes.
 export function encode(text, options = {}) {
   const o = { ...DEFAULTS, ...options };
   checkOptions(o);
@@ -94,15 +102,18 @@ export function encode(text, options = {}) {
   let dataBits = Infinity;
   for (;; version++) {
     if (segments === null || version === 10 || version === 27) {
-      segments = makeSegments(text, version, o.mode);
+      segments = makeSegments(text, version, o.mode, o.eci);
       if (segments === null)
         throw new RangeError(`The text cannot be encoded in ${o.mode} mode`);
     }
     dataBits = bitLength(segments, version, o.eci);
     if (dataBits <= dataCodewords(version, o.ecLevel) * 8)
       break;
-    if (version === o.maxVersion)
-      throw new CapacityError(dataBits, dataCodewords(o.maxVersion, o.ecLevel) * 8);
+    if (version >= o.maxVersion) {
+      // A character count can overflow its field below version 40; report the real need.
+      const needed = Number.isFinite(dataBits) ? dataBits : bitLength(makeSegments(text, 40, o.mode, o.eci), 40, o.eci);
+      throw new CapacityError(needed, dataCodewords(o.maxVersion, o.ecLevel) * 8);
+    }
   }
   let level = o.ecLevel;
   if (o.boostEc)

@@ -39,7 +39,7 @@ export const STYLE = {
   boost: B,
 };
 
-export const MAX_TEXT = 4000;
+export const MAX_TEXT = 4500;
 export const MAX_FRAGMENT = 8000;
 
 export function defaultState() {
@@ -75,7 +75,7 @@ export function coerce(kind, raw) {
   if (Array.isArray(kind))
     return kind.includes(text) ? text : undefined;
   const value = Number(text);
-  if (!Number.isFinite(value))
+  if (text.trim() === '' || !Number.isFinite(value))
     return undefined;
   const [low, high] = kind.int ?? kind.number;
   const clamped = Math.min(high, Math.max(low, value));
@@ -143,8 +143,10 @@ export function hasContent(params) {
   return false;
 }
 
+// The caption is user text, so it is shareable in a link but never kept on the device.
 export function styleToJson(state) {
-  return JSON.stringify(state.style);
+  const { caption, ...kept } = state.style;
+  return JSON.stringify(kept);
 }
 
 export function styleFromJson(state, json) {

@@ -8,7 +8,8 @@ import { toText } from '../render/text.js';
 import { withDpi } from '../io/png.js';
 import { makeZip } from '../io/zip.js';
 import { download, slug } from '../io/download.js';
-import { serialize, defaultState } from './state.js';
+import { serialize, defaultState, MAX_TEXT, MAX_FRAGMENT } from './state.js';
+import { inspectUrl } from '../payload/inspect.js';
 import { current, describe, render, sync, effectiveLevel } from './ui.js';
 
 const $ = id => document.getElementById(id);
@@ -203,6 +204,12 @@ function print(state) {
   window.print();
 }
 
+function clearPrintArea() {
+  const area = $('print-area');
+  while (area.firstChild)
+    area.removeChild(area.firstChild);
+}
+
 async function batch(state, format) {
   const lines = $('batch-text').value.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   if (lines.length === 0) {
@@ -216,12 +223,17 @@ async function batch(state, format) {
   const files = [];
   const skipped = [];
   const used = new Set();
+  const buttons = [$('batch-png'), $('batch-svg')];
+  for (const button of buttons)
+    button.disabled = true;
   for (let i = 0; i < lines.length; i++) {
     $('batch-status').textContent = `Making ${i + 1} of ${lines.length}…`;
     if (i % 8 === 0)
       await new Promise(resolve => setTimeout(resolve, 0));
     let code;
     try {
+      if (lines[i].length > MAX_TEXT || inspectUrl(lines[i]).some(f => f.level === 'block'))
+        throw new RangeError('refused');
       code = encode(lines[i], { ecLevel: effectiveLevel(state), boostEc: state.style.boost, eci: state.style.eci });
     } catch {
       skipped.push(i + 1);
@@ -238,13 +250,21 @@ async function batch(state, format) {
       files.push({ name: `${name}.png`, data: new Uint8Array(await blob.arrayBuffer()) });
     }
   }
-  download(makeZip(files), 'qr-codes.zip');
-  status('batch-status', skipped.length ? `Done. Lines ${skipped.join(', ')} were too long and were skipped.` : `Done: ${files.length} codes.`);
+  for (const button of buttons)
+    button.disabled = false;
+  if (files.length > 0)
+    download(makeZip(files), 'qr-codes.zip');
+  status('batch-status', skipped.length ? `Done: ${files.length} codes. Lines ${skipped.join(', ')} were too long or were script links, and were skipped.` : `Done: ${files.length} codes.`);
 }
 
 async function copyLink(state) {
   const content = $('link-content').checked;
-  const link = `${location.origin}${location.pathname}#${serialize(state, { content })}`;
+  const fragment = serialize(state, { content });
+  if (fragment.length > MAX_FRAGMENT) {
+    status('link-status', 'The content is too long to fit in a link. Share the image instead.');
+    return;
+  }
+  const link = `${location.origin}${location.pathname}#${fragment}`;
   try {
     await navigator.clipboard.writeText(link);
     status('link-status', content ? 'Link copied. It carries the content, so share it with care.' : 'Link copied. It carries the style only.');
@@ -272,6 +292,7 @@ export function bindActions(state) {
   $('copy-image').addEventListener('click', () => copyImage(state));
   $('copy-text').addEventListener('click', copyText);
   $('print').addEventListener('click', () => print(state));
+  window.addEventListener('afterprint', clearPrintArea);
   $('batch-png').addEventListener('click', () => batch(state, 'png'));
   $('batch-svg').addEventListener('click', () => batch(state, 'svg'));
   $('copy-link').addEventListener('click', () => copyLink(state));

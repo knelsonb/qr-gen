@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; manifest-src 'self'; worker-src 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; upgrade-insecure-requests; base-uri 'none'; form-action 'none'; object-src 'none'; manifest-src 'self'; worker-src 'self'">
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#1a1a1a">
@@ -266,8 +266,8 @@
 <footer>
   <details>
     <summary>About, privacy and security</summary>
-    <p>Everything on this page runs in your browser. The text you type, the codes you make and any logo you choose are never sent anywhere. The page makes no network requests after it loads, sets no cookies, and has no analytics, ads or third-party code. You can check this in your browser's developer tools, or go offline and keep using it.</p>
-    <p>The host, Cloudflare, sees ordinary connection logs when you load the page, like any website. Your style settings are kept on this device so they are there next time; the content of a code is never kept. <button type="button" id="forget" class="link">Forget my settings</button>.</p>
+    <p>Everything on this page runs in your browser. The text you type, the codes you make and any logo you choose are never sent anywhere. Once loaded, the only requests the page makes are for its own files from this site, so it can work offline; it sets no cookies and has no analytics, ads or third-party code. You can check this in your browser's developer tools, or go offline and keep using it.</p>
+    <p>The host, Cloudflare, sees ordinary connection logs when you load the page, like any website. Your style settings, colours, border and the like, are kept on this device once you change them so they are there next time. The content of a code and its caption are never kept. <button type="button" id="forget" class="link">Forget my settings</button>.</p>
     <p>Links with settings in them can pre-fill this page, so look at what the code contains before you print or share it. The page warns about link shapes that are commonly abused, but a warning is a hint and does not prove a link safe.</p>
     <p>A printed code is permanent. This page makes plain codes that hold their content directly, so there is nothing to expire and no one is told when it is scanned.</p>
     <p>The source is short and public: <a href="https://github.com/thereprocase/qr" rel="noopener">github.com/thereprocase/qr</a>. To report a vulnerability, see <a href="/.well-known/security.txt">security.txt</a>.</p>

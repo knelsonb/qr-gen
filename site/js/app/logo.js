@@ -7,8 +7,11 @@ const MAX_SIDE = 4096;
 const LOGO_PIXELS = 512;
 
 function readDimensions(bytes) {
+  if (bytes.length < 32)
+    return null;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47)
+  const ascii = (from, to) => String.fromCharCode(...bytes.subarray(from, to));
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 && ascii(12, 16) === 'IHDR')
     return { type: 'png', width: view.getUint32(16), height: view.getUint32(20) };
   if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
     let i = 2;
@@ -24,8 +27,8 @@ function readDimensions(bytes) {
     }
     return null;
   }
-  if (String.fromCharCode(...bytes.subarray(0, 4)) === 'RIFF' && String.fromCharCode(...bytes.subarray(8, 12)) === 'WEBP') {
-    const chunk = String.fromCharCode(...bytes.subarray(12, 16));
+  if (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') {
+    const chunk = ascii(12, 16);
     if (chunk === 'VP8 ')
       return { type: 'webp', width: view.getUint16(26, true) & 0x3fff, height: view.getUint16(28, true) & 0x3fff };
     if (chunk === 'VP8L') {
@@ -42,8 +45,7 @@ function readDimensions(bytes) {
 export async function loadLogo(file) {
   if (file.size > MAX_BYTES)
     throw new Error('The image is over 2 MB. A logo this small does not need that much.');
-  const head = new Uint8Array(await file.slice(0, 64 * 1024).arrayBuffer());
-  const info = readDimensions(head);
+  const info = readDimensions(new Uint8Array(await file.arrayBuffer()));
   if (info === null)
     throw new Error('Only PNG, JPEG and WebP images are accepted.');
   if (info.width > MAX_SIDE || info.height > MAX_SIDE)

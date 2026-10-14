@@ -82,11 +82,12 @@ function segmentFor(mode, text) {
 // counted in sixths of a bit so that the fractional per-character costs stay integers.
 // Switching modes starts a new segment, which costs a mode indicator and a character count.
 // Kanji mode is only used for text that is entirely Kanji: readers guess the character set of
-// byte segments, and a Kanji segment beside them tips some into Latin-1.
-function cheapestModes(chars, version) {
+// byte segments, and a Kanji segment beside them tips some into Latin-1. It is Shift JIS, so it
+// never goes under a UTF-8 ECI header either.
+function cheapestModes(chars, version, eci) {
   const modes = ['byte', 'alphanumeric', 'numeric', 'kanji'];
   const headCosts = modes.map(mode => (4 + charCountBits(mode, version)) * 6);
-  const allKanji = chars.every(isKanji);
+  const allKanji = !eci && chars.every(isKanji);
   const charCosts = [
     char => encoder.encode(char).length * 48,
     char => (isAlphanumeric(char) ? 33 : Infinity),
@@ -123,16 +124,18 @@ function cheapestModes(chars, version) {
 
 // Segments for the text, as few bits as the four modes allow at this version. A forced mode
 // gives one segment, or none when the text has a character outside it.
-export function makeSegments(text, version, mode = 'auto') {
+export function makeSegments(text, version, mode = 'auto', eci = false) {
   if (text.length === 0)
     return [];
+  if (text instanceof Uint8Array)
+    return [byteSegment(text)];
   if (mode !== 'auto') {
     const chars = Array.from(text);
     const fits = { numeric: isNumeric, alphanumeric: isAlphanumeric, kanji: isKanji, byte: () => true }[mode];
     return chars.every(fits) ? [segmentFor(mode, text)] : null;
   }
   const chars = Array.from(text);
-  const modes = cheapestModes(chars, version);
+  const modes = cheapestModes(chars, version, eci);
   const segments = [];
   let start = 0;
   for (let i = 1; i <= chars.length; i++) {

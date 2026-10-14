@@ -4,7 +4,7 @@
 const RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
 
 export function slug(text, fallback = 'qr-code') {
-  const cleaned = String(text).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+  const cleaned = String(text).toLowerCase().normalize('NFKD').replace(/\p{M}/gu, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
   return cleaned === '' || RESERVED.test(cleaned) ? fallback : cleaned;
 }
 
