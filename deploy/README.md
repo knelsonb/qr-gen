@@ -16,26 +16,23 @@ Static files on Cloudflare's edge, no server to keep up, `_headers` honoured, de
 4. Check: `curl -sI https://qr.thetallkeith.com | grep -i content-security-policy` shows the
    policy, and `/sw.js` comes back with `cache-control: no-cache`.
 
-## Route B: pve LXC behind a Cloudflare Tunnel
+## Route B: pve LXC behind a Cloudflare Tunnel (what runs now)
 
-The pattern CT 101 already uses for hotspades.com, in its own small container.
+CT 120 `qr` on pve: Debian 13, unprivileged, 1 core, 256 MB, 2 GB, DHCP on vmbr0, starts
+with the host. Inside it nginx serves `/srv/qr/site` through `deploy/nginx-qr.conf`, and
+cloudflared runs a locally managed tunnel named `qr-pve` as a systemd service.
 
-1. On pve, a Debian LXC (256 MB, 2 GB disk, unprivileged) named `qr`. Inside:
-   `apt install nginx git`.
-2. `git clone https://github.com/knelsonb/qr-gen /srv/qr` and copy `deploy/nginx-qr.conf` to
-   `/etc/nginx/sites-available/qr`, link it into `sites-enabled`, remove `default`,
-   `nginx -t && systemctl reload nginx`. `curl -sI http://localhost/ | grep -i content-security`
-   shows the policy.
-3. Cloudflare dashboard: Zero Trust, Networks, Tunnels, Create a tunnel (name `qr`), choose the
-   Debian install and run the shown `cloudflared service install <token>` line in the LXC. Add a
-   public hostname `qr.thetallkeith.com` with service `http://localhost:80`. The tunnel creates
-   the proxied CNAME.
-4. Updates: `cd /srv/qr && git pull`. A systemd timer running that every few minutes, or a
-   `git pull` over SSH from this machine, keeps it current. The service worker's `no-cache`
-   header makes visitors pick up a new version on their next visit.
-5. Cache: a Cache Rule for the host with "Eligible for cache" so the edge serves the files and
-   the home uplink stays quiet. Keep `sw.js` and `/` out of it, or trust the `no-cache` header,
-   which Cloudflare respects.
+- Tunnel config: `/etc/cloudflared/config.yml` (one ingress rule, `qr.thetallkeith.com` to
+  `http://localhost:80`, everything else 404). Credentials live in `/root/.cloudflared/`.
+- DNS: the proxied CNAME `qr` was written by `cloudflared tunnel route dns`.
+- Update the site: on pve, `pct exec 120 -- bash -c 'cd /srv/qr && git pull && cp
+  deploy/nginx-qr.conf /etc/nginx/sites-available/qr && nginx -t && systemctl reload nginx'`.
+  The service worker's `no-cache` header makes visitors pick up the new version next visit.
+- Health: `pct exec 120 -- cloudflared tunnel info qr-pve`, or the Tunnels page in Zero Trust.
+- If the container is ever rebuilt: `apt install nginx git cloudflared` (Cloudflare's apt repo,
+  key at `/usr/share/keyrings/cloudflare-main.gpg`), clone the repo, `cloudflared tunnel login`
+  and authorise the zone in a browser, then `tunnel create`, the config above, `tunnel route dns`
+  and `service install`.
 
 Trade-offs against Route A: the site is only up while pve and the home connection are; the LXC
 and cloudflared need updates; the tunnel daemon is a dependency Route A does not have. In its
