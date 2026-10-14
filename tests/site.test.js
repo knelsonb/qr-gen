@@ -54,3 +54,17 @@ test('no innerHTML or eval in the app', () => {
   for (const file of walk('js'))
     assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|\beval\(|new Function/.test(read(file)), file);
 });
+
+test('the nginx config carries the same headers as _headers', () => {
+  const headers = read('_headers').split('\n').slice(1).filter(l => l.startsWith('  ')).map(l => l.trim());
+  const nginx = readFileSync(new URL('../deploy/nginx-qr.conf', import.meta.url), 'utf8');
+  for (const line of headers) {
+    const [name, value] = line.split(/:\s(.+)/);
+    if (name === 'Cache-Control')
+      continue;
+    assert.ok(nginx.includes(`add_header ${name} "${value}" always;`), line);
+  }
+  assert.ok(nginx.includes('add_header Cache-Control $qr_cache_control always;'));
+  assert.ok(/sw\\.js\|index\\.html\)\?\$\s+"no-cache"/.test(nginx));
+  assert.ok(!/location[^}]*add_header/.test(nginx), 'add_header inside a location drops the server headers');
+});
