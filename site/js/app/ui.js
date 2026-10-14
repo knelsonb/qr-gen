@@ -5,7 +5,7 @@ import { encode, CapacityError, capacityBits } from '../qr/encode.js';
 import { drawCode } from '../render/canvas.js';
 import { build } from '../payload/builders.js';
 import { inspect, revealControls } from '../payload/inspect.js';
-import { STYLE, FIELDS, TYPES, MAX_TEXT, coerce, applySettings, styleToJson } from './state.js';
+import { STYLE, FIELDS, MAX_TEXT, coerce, applySettings, styleToJson } from './state.js';
 import { assess } from './scannability.js';
 
 const $ = id => document.getElementById(id);
@@ -375,4 +375,3 @@ export function offerLinkContent(state, params) {
   };
 }
 
-export { TYPES };
