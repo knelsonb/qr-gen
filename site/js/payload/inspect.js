@@ -13,9 +13,20 @@ function hostScripts(host) {
   return scripts;
 }
 
+// Browsers drop control characters and spaces inside a scheme, so the check does too.
+function schemeOf(text) {
+  const cleaned = text.replace(/[\u0000-\u0020\u007f]/g, '');
+  return (cleaned.match(/^([a-z][a-z0-9+.-]*):/i) || [])[1]?.toLowerCase();
+}
+
+// The host as typed, before the URL parser turns other alphabets into punycode.
+function rawHost(text) {
+  return (text.match(/^[a-z][a-z0-9+.-]*:\/\/(?:[^/?#@]*@)?([^/?#:]+)/i) || [])[1] ?? '';
+}
+
 export function inspectUrl(text) {
   const findings = [];
-  const scheme = (text.match(/^([a-z][a-z0-9+.-]*):/i) || [])[1]?.toLowerCase();
+  const scheme = schemeOf(text);
   if (!scheme)
     return findings;
   if (BLOCKED_SCHEMES.includes(scheme)) {
@@ -43,7 +54,7 @@ export function inspectUrl(text) {
     findings.push({ level: 'warn', text: 'The host is a bare IP address. Readers will show it as such, and people are rightly wary of those.' });
   if (parsed.hostname.split('.').some(label => label.startsWith('xn--')))
     findings.push({ level: 'warn', text: `The host ${parsed.hostname} is an internationalised name in its encoded form. Make sure it is the site you mean.` });
-  if (hostScripts(parsed.hostname).size > 1)
+  if (hostScripts(rawHost(text)).size > 1)
     findings.push({ level: 'warn', text: 'The host mixes alphabets, which is how look-alike domains are made.' });
   if (SHORTENERS.includes(parsed.hostname.replace(/^www\./, '').replace(/\.$/, '')))
     findings.push({ level: 'info', text: 'A shortener hides the destination until scanned, and stops working if the service does. A direct link is better on print.' });
@@ -65,10 +76,12 @@ export function inspect(type, payload) {
     return findings;
   if (type === 'url')
     findings.push(...inspectUrl(payload));
-  if (type === 'text' && new RegExp(`^(${BLOCKED_SCHEMES.join('|')}):`, 'i').test(payload.trim()))
+  if (type === 'text' && BLOCKED_SCHEMES.includes(schemeOf(payload)))
     findings.push({ level: 'block', text: 'This starts like a script or file link. Readers refuse those, and so does this page.' });
-  if (type === 'wifi' && /;P:/.test(payload))
+  if (type === 'wifi' && /;P:[^;]/.test(payload))
     findings.push({ level: 'info', text: 'The network password is in the code in plain text. Anyone who scans it can join.' });
+  if (type === 'wifi' && /^WIFI:T:(WPA|WEP);/.test(payload) && !/;P:[^;]/.test(payload))
+    findings.push({ level: 'warn', text: 'This network type needs a password, so the code will not join. If the network is open, choose None.' });
   if (type === 'contact')
     findings.push({ level: 'info', text: 'Everything in the card is readable by anyone who scans it.' });
   if (/[\u200b-\u200f\u202a-\u202e\u2066-\u2069]/.test(payload))
