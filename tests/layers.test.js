@@ -16,13 +16,20 @@ import { withDpi } from '../site/js/io/png.js';
 import { slug } from '../site/js/io/download.js';
 import { defaultState, applySettings, serialize, parseFragment, hasContent, styleFromJson, styleToJson, TYPES, FIELDS } from '../site/js/app/state.js';
 import { assess, contrastRatio } from '../site/js/app/scannability.js';
+import { parseWifi } from '../site/js/payload/detect.js';
+import { describe } from '../site/js/app/model.js';
+import { kanjiValue } from '../site/js/qr/kanji.js';
+import { logoBox, padPath } from '../site/js/render/logo.js';
 import { toPbm } from './pbm.js';
 
+// Under CI a missing tool is a failure, not a skip, so the decoder checks always run there.
 const has = name => {
   try {
-    execFileSync(name, ['--version'], { stdio: 'ignore' });
+    execFileSync(name, [name === 'unzip' ? '-v' : '--version'], { stdio: 'ignore' });
     return true;
   } catch {
+    if (process.env.CI)
+      throw new Error(`${name} is required in CI`);
     return false;
   }
 };
@@ -120,7 +127,9 @@ test('zip extracts with the system tool', { skip: !has('unzip') && 'unzip is not
   const file = join(dir, 'codes.zip');
   writeFileSync(file, new Uint8Array(await blob.arrayBuffer()));
   execFileSync('unzip', ['-tq', file]);
-  assert.equal(execFileSync('unzip', ['-p', file, 'zweite-ü.txt']).toString(), 'zwei');
+  // Some unzip builds print non-ASCII names escaped, so only the ASCII part is checked.
+  assert.match(execFileSync('unzip', ['-Z1', file]).toString(), /zweite-/);
+  assert.ok(execFileSync('unzip', ['-p', file, 'first.svg']).toString().startsWith('<?xml'));
 });
 
 test('pHYs chunk is inserted after IHDR', () => {
@@ -159,9 +168,11 @@ test('settings round trip through the fragment for every type', () => {
     assert.ok(params && hasContent(params));
     const back = applySettings(defaultState(), key => params.get(key), { content: true });
     assert.deepEqual(back, state, type);
+    // A style-only link carries neither the content nor the caption.
     const styleOnly = applySettings(defaultState(), key => parseFragment(`#${serialize(state)}`).get(key), { content: true });
     assert.deepEqual(styleOnly.fields, defaultState().fields);
-    assert.deepEqual(styleOnly.style, state.style);
+    assert.deepEqual({ ...styleOnly.style, caption: state.style.caption }, state.style);
+    assert.equal(styleOnly.style.caption, '');
   }
 });
 
@@ -257,11 +268,56 @@ test('logo box snaps to the grid and the pad shapes are paths', async () => {
   assert.ok(svg.includes('<path d="M'));
 });
 
-test('a pasted WIFI: string is parsed into the form fields', async () => {
-  const { parseWifi } = await import('../site/js/app/ui.js');
-  const wifi = parseWifi(['WIFI:T:WPA;S:Caf\u00e9 Guest;P:pass', String.fromCharCode(92), ';word;H:true;;'].join(''));
-  assert.deepEqual(wifi, { ssid: 'Café Guest', password: 'pass;word', security: 'WPA', hidden: true });
+test('a pasted WIFI: string is parsed into the form fields', () => {
+  const backslash = String.fromCharCode(92);
+  const wifiText = parseWifi(['WIFI:T:WPA;S:Caf\u00e9 Guest;P:pass', backslash, ';word;H:true;;'].join(''));
+  assert.deepEqual(wifiText, { ssid: 'Caf\u00e9 Guest', password: 'pass;word', security: 'WPA', hidden: true });
   assert.deepEqual(parseWifi('WIFI:S:Open;T:nopass;;'), { ssid: 'Open', password: '', security: 'nopass', hidden: false });
+  assert.deepEqual(parseWifi('WIFI:S:a;T:wpa2;H:TRUE;;'), { ssid: 'a', password: '', security: 'WPA', hidden: true });
   assert.equal(parseWifi('https://example.com'), null);
   assert.equal(parseWifi('WIFI:T:WPA;;'), null);
+  // The builder's own output round-trips, including a password that ends in a backslash.
+  const built = wifi({ ssid: `a${backslash}`, password: `x${backslash}`, security: 'WPA', hidden: true });
+  assert.deepEqual(parseWifi(built), { ssid: `a${backslash}`, password: `x${backslash}`, security: 'WPA', hidden: true });
+});
+
+test('war council: payload, kanji, inspector and geometry fixes', () => {
+  assert.equal(sms({ number: '555:12', message: 'hi' }), 'SMSTO:55512:hi');
+  assert.equal(build('geo', { lat: '0.0000001', lng: '-0.00000005', format: 'geo' }), 'geo:0.0000001,-0.00000005');
+  assert.ok(!event({ title: 'x', start: '2026-10-13T10:00', end: '2026-10-13T09:00' }).includes('DTEND'));
+  assert.equal(build('crypto', { coin: 'bitcoin', address: 'a', amount: '.5' }), 'bitcoin:a?amount=0.5');
+  assert.equal(build('crypto', { coin: 'bitcoin', address: 'a', amount: '5.' }), 'bitcoin:a?amount=5');
+  assert.equal(kanjiValue('\u2252'), 0xa0);
+  assert.ok(inspectUrl('https://\u0430pple.com/').some(f => f.text.includes('mixes alphabets')));
+  assert.ok(inspectUrl('java\tscript:alert(1)').some(f => f.level === 'block'));
+  assert.ok(inspect('text', '\u0001javascript:alert(1)').some(f => f.level === 'block'));
+  assert.ok(inspect('wifi', 'WIFI:T:WPA;S:a;P:;;').some(f => f.text.includes('needs a password')));
+  for (let v = 1; v <= 40; v++)
+    for (const fraction of [0.1, 0.2, 0.3]) {
+      const code = { size: v * 4 + 17 };
+      const box = logoBox(code, 4, fraction);
+      assert.equal((code.size - box.side) % 2, 0, `v${v} parity`);
+      assert.ok(box.side >= 3 && box.side <= Math.max(3, code.size - 16), `v${v} side`);
+      assert.ok(Number.isInteger(box.x), `v${v} x`);
+      assert.ok(padPath(box, 'rounded').endsWith('z'));
+    }
+});
+
+test('a settings link replaces the page settings instead of mixing with them', () => {
+  const state = defaultState();
+  state.style.quiet = 1;
+  state.style.dark = '#333333';
+  state.type = 'wifi';
+  state.fields.wifi.password = 'secret';
+  state.fields.wifi.hidden = true;
+  const params = new URLSearchParams('v=1&type=wifi&f.ssid=Guest&caption=Hi');
+  applySettings(state, key => params.get(key), { content: true });
+  assert.equal(state.style.quiet, 4);
+  assert.equal(state.style.dark, '#000000');
+  assert.equal(state.style.caption, 'Hi');
+  assert.deepEqual(state.fields.wifi, { ssid: 'Guest', password: '', security: 'WPA', hidden: false });
+  assert.ok(hasContent(new URLSearchParams('v=1&caption=x')));
+  assert.ok(!serialize(state).includes('caption'));
+  assert.ok(serialize(state, { content: true }).includes('caption=Hi'));
+  assert.equal(describe(state), 'the Wi-Fi network Guest');
 });
