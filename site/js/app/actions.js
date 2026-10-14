@@ -2,19 +2,20 @@
 // link. Each works from the last rendered code.
 
 import { encode } from '../qr/encode.js';
-import { drawCode, toPngBlob } from '../render/canvas.js';
-import { toSvg } from '../render/svg.js';
 import { toText } from '../render/text.js';
-import { withDpi } from '../io/png.js';
 import { makeZip } from '../io/zip.js';
 import { download, slug } from '../io/download.js';
 import { serialize, defaultState, coerce, STYLE, MAX_TEXT, MAX_FRAGMENT } from './state.js';
 import { inspectUrl } from '../payload/inspect.js';
-import { current, describe, render, sync, encodeOptions, saveStyle, widthMm } from './ui.js';
+import { current, render, sync, saveStyle } from './ui.js';
+import { encodeOptions, widthMm } from './model.js';
+import { pngBlob, svgText, filename } from './export.js';
 import { bumpCount, resetCount } from './counter.js';
+import { $, clear } from './dom.js';
 
-const $ = id => document.getElementById(id);
 const MAX_BATCH = 200;
+const COPY_PIXELS = 1024;
+const BATCH_PIXELS = 512;
 
 function status(id, text) {
   $(id).textContent = text;
@@ -25,48 +26,17 @@ function status(id, text) {
     }, 4000);
 }
 
-function filename(state, extension) {
-  return `${slug(state.style.caption || describe(state))}.${extension}`;
-}
-
-function styleOptions(state) {
-  return {
-    quiet: state.style.quiet,
-    dark: state.style.dark,
-    light: state.style.light,
-    rounded: state.style.rounded,
-  };
-}
-
-// A PNG of the code at a whole number of pixels per module, no larger than `pixels` across.
-async function pngBlob(state, code, pixels) {
-  const canvas = document.createElement('canvas');
-  const total = code.size + 2 * state.style.quiet;
-  const drawn = drawCode(canvas, code, {
-    ...styleOptions(state),
-    pixelsPerModule: Math.max(1, Math.floor(pixels / total)),
-    logo: state.logo ? { image: state.logo.image, fraction: state.style.logoFraction, shape: state.style.logoShape } : null,
-  });
-  const blob = await toPngBlob(canvas);
-  const dpi = drawn / (widthMm(state) / 25.4);
-  return new Blob([withDpi(await blob.arrayBuffer(), dpi)], { type: 'image/png' });
-}
-
-function svgText(state, code) {
-  return toSvg(code, {
-    ...styleOptions(state),
-    title: state.style.caption || `QR code: ${describe(state)}`,
-    widthMm: widthMm(state),
-    pixelsPerModule: 10,
-    logo: state.logo ? { dataUrl: state.logo.dataUrl, fraction: state.style.logoFraction, shape: state.style.logoShape } : null,
-  });
+function nothingYet() {
+  status('take-status', 'Nothing to save yet. Type something in 01.');
 }
 
 // `pixels` is remembered as the size Ctrl+S and the phone bar reuse.
 async function savePng(state, pixels = state.style.size, button = null) {
   const { code } = current();
-  if (!code)
+  if (!code) {
+    nothingYet();
     return;
+  }
   const total = code.size + 2 * state.style.quiet;
   if (pixels < total) {
     status('take-status', `This code is ${total} squares across, so the PNG needs at least ${total} px.`);
@@ -76,22 +46,24 @@ async function savePng(state, pixels = state.style.size, button = null) {
   saveStyle(state);
   if (button && !button.dataset.busy) {
     button.dataset.busy = button.textContent;
-    button.disabled = true;
+    button.setAttribute('aria-disabled', 'true');
     button.textContent = 'Rendering…';
   }
   await new Promise(resolve => requestAnimationFrame(resolve));
   try {
     const name = filename(state, 'png');
-    download(await pngBlob(state, code, pixels), name);
+    const { blob, drawn } = await pngBlob(state, code, pixels);
+    download(blob, name);
     bumpCount();
-    status('take-status', `Saved ${name} (${pixels} px).`);
+    status('take-status', `Saved ${name} (${drawn} px).`);
+    $('announce').textContent = `Saved ${name}.`;
   } catch (err) {
     $('error').textContent = err.message;
   } finally {
     if (button && button.dataset.busy) {
       button.textContent = button.dataset.busy;
       delete button.dataset.busy;
-      button.disabled = false;
+      button.removeAttribute('aria-disabled');
     }
   }
 }
@@ -108,31 +80,38 @@ function saveSvg(state) {
 
 async function copyImage(state) {
   const { code } = current();
-  if (!code)
+  if (!code) {
+    nothingYet();
     return;
-  try {
-    if (!('ClipboardItem' in window))
-      throw new Error('no ClipboardItem');
-    // Safari only allows the write inside the click, so the blob goes in as a promise.
-    await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob(state, code, 1024) })]);
-    bumpCount();
-    status('take-status', 'Image copied.');
-  } catch {
+  }
+  if (!('ClipboardItem' in window)) {
+    // Older browsers take text only; the SVG source is the next best thing.
     try {
       await navigator.clipboard.writeText(svgText(state, code));
+      bumpCount();
       status('take-status', 'This browser cannot copy images, so the SVG text was copied instead.');
     } catch {
       status('take-status', 'Copying is blocked here. Download instead.');
     }
+    return;
+  }
+  try {
+    // Safari only allows the write inside the click, so the blob goes in as a promise.
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob(state, code, COPY_PIXELS).then(r => r.blob) })]);
+    bumpCount();
+    status('take-status', 'Image copied.');
+  } catch {
+    status('take-status', 'Copying is blocked here. Download instead.');
   }
 }
 
-async function copyText() {
+async function copyText(state) {
   const { code } = current();
   if (!code)
     return;
   try {
-    await navigator.clipboard.writeText(toText(code));
+    await navigator.clipboard.writeText(toText(code, state.style.quiet));
+    bumpCount();
     status('link-status', 'Copied as text blocks. Paste into a terminal or chat with a monospace font.');
   } catch {
     status('link-status', 'Copying is blocked here.');
@@ -143,7 +122,8 @@ async function share(state) {
   const { code } = current();
   if (!code || !navigator.share)
     return;
-  const file = new File([await pngBlob(state, code, 1024)], filename(state, 'png'), { type: 'image/png' });
+  const { blob } = await pngBlob(state, code, COPY_PIXELS);
+  const file = new File([blob], filename(state, 'png'), { type: 'image/png' });
   const data = { files: [file], title: state.style.caption || 'QR code' };
   try {
     if (navigator.canShare && !navigator.canShare(data))
@@ -160,10 +140,12 @@ async function share(state) {
 // the network details in large type for the guest whose camera will not cooperate.
 function print(state) {
   const { code, type } = current();
-  if (!code)
+  if (!code) {
+    nothingYet();
     return;
-  clearPrintArea();
+  }
   const area = $('print-area');
+  clear(area);
   // The same SVG the download makes, parsed as a document; it holds only numbers, checked
   // colours, an escaped title and the page's own data URL.
   const parsed = new DOMParser().parseFromString(svgText(state, code), 'image/svg+xml');
@@ -198,18 +180,16 @@ function print(state) {
     }
     area.append(card);
   }
+  if (widthMm(state) > 186)
+    status('take-status', 'Wider than an A4 or Letter page: the browser may shrink or clip it.');
   window.print();
   bumpCount();
 }
 
-function clearPrintArea() {
-  const area = $('print-area');
-  while (area.firstChild)
-    area.removeChild(area.firstChild);
-}
-
 async function batch(state, format) {
-  const lines = $('batch-text').value.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const lines = $('batch-text').value.split(/\r?\n/)
+    .map((text, index) => ({ text: text.trim(), line: index + 1 }))
+    .filter(entry => entry.text !== '');
   if (lines.length === 0) {
     status('batch-status', 'Nothing to make: the box is empty.');
     return;
@@ -220,12 +200,11 @@ async function batch(state, format) {
   }
   const files = [];
   const skipped = [];
-  const used = new Set();
   const buttons = [$('batch-png'), $('batch-svg')];
   for (const button of buttons)
     button.disabled = true;
   try {
-    await makeBatch(state, format, lines, files, skipped, used);
+    await makeBatch(state, format, lines, files, skipped);
   } finally {
     for (const button of buttons)
       button.disabled = false;
@@ -238,29 +217,31 @@ async function batch(state, format) {
   status('batch-status', skipped.length ? `Done: ${made}. Lines ${skipped.join(', ')} were too long or were script links, and were skipped.` : `Done: ${made}.`);
 }
 
-async function makeBatch(state, format, lines, files, skipped, used) {
+async function makeBatch(state, format, lines, files, skipped) {
+  const used = new Set();
   for (let i = 0; i < lines.length; i++) {
+    const { text, line } = lines[i];
     $('batch-status').textContent = `Making ${i + 1} of ${lines.length}…`;
     // A short yield every few codes keeps the progress text painting.
     if (i % 8 === 0)
       await new Promise(resolve => setTimeout(resolve, 0));
     let code;
     try {
-      if (lines[i].length > MAX_TEXT || inspectUrl(lines[i]).some(f => f.level === 'block'))
+      if (text.length > MAX_TEXT || inspectUrl(text).some(f => f.level === 'block'))
         throw new RangeError('refused');
-      code = encode(lines[i], encodeOptions(state));
+      code = encode(text, encodeOptions(state));
     } catch {
-      skipped.push(i + 1);
+      skipped.push(line);
       continue;
     }
-    let name = `${String(i + 1).padStart(3, '0')}-${slug(lines[i])}`;
+    let name = `${String(line).padStart(3, '0')}-${slug(text)}`;
     while (used.has(name))
       name += '-';
     used.add(name);
     if (format === 'svg') {
       files.push({ name: `${name}.svg`, data: new TextEncoder().encode(svgText(state, code)) });
     } else {
-      const blob = await pngBlob(state, code, 512);
+      const { blob } = await pngBlob(state, code, BATCH_PIXELS);
       files.push({ name: `${name}.png`, data: new Uint8Array(await blob.arrayBuffer()) });
     }
   }
@@ -277,8 +258,8 @@ async function copyLink(state) {
   try {
     await navigator.clipboard.writeText(link);
     status('link-status', content
-      ? 'Link copied. It holds the content, colours, border, caption and print size, so share it with care. A logo does not travel in links.'
-      : 'Link copied. It holds colours, border, caption and print size. A logo does not travel in links.');
+      ? 'Link copied. It holds the content and the caption as well as colours, border and print size, so share it with care. A logo does not travel in links.'
+      : 'Link copied. It holds colours, border and print size; the content and caption stay here. A logo does not travel in links.');
   } catch {
     status('link-status', 'Copying is blocked here.');
   }
@@ -292,9 +273,25 @@ function forget(state) {
   }
   state.style = defaultState().style;
   resetCount();
+  history.replaceState(null, '', location.pathname);
   sync(state);
   render(state);
-  status('link-status', 'Settings and the count forgotten.');
+  status('forget-status', 'Settings and the count forgotten.');
+}
+
+// On a phone the bar's last button jumps to whichever of the code and the form is off screen.
+function bindPhoneBar(state) {
+  const figure = $('preview').parentElement;
+  let codeVisible = false;
+  new IntersectionObserver(entries => {
+    codeVisible = entries[0].isIntersecting;
+    $('bar-top').textContent = codeVisible ? 'Edit' : 'See code';
+  }, { threshold: 0.6, rootMargin: '0px 0px -80px 0px' }).observe(figure);
+  $('bar-top').addEventListener('click', () => {
+    const target = codeVisible ? $('types') : figure;
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  $('bar-save').addEventListener('click', () => savePng(state, state.style.size, $('bar-save')));
 }
 
 export function bindActions(state) {
@@ -309,12 +306,11 @@ export function bindActions(state) {
     $('custom-size').value = pixels;
     savePng(state, pixels, $('download-custom'));
   });
-  $('bar-save').addEventListener('click', () => savePng(state));
   $('download-svg').addEventListener('click', () => saveSvg(state));
   $('copy-image').addEventListener('click', () => copyImage(state));
-  $('copy-text').addEventListener('click', copyText);
+  $('copy-text').addEventListener('click', () => copyText(state));
   $('print').addEventListener('click', () => print(state));
-  window.addEventListener('afterprint', clearPrintArea);
+  window.addEventListener('afterprint', () => clear($('print-area')));
   $('batch-png').addEventListener('click', () => batch(state, 'png'));
   $('batch-svg').addEventListener('click', () => batch(state, 'svg'));
   $('copy-link').addEventListener('click', () => copyLink(state));
@@ -324,22 +320,7 @@ export function bindActions(state) {
     about.open = true;
     about.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
-  // On a phone the bar's last button jumps to whichever of the code and the form is off screen.
-  let codeVisible = false;
-  new IntersectionObserver(entries => {
-    codeVisible = entries[0].isIntersecting;
-    $('bar-top').textContent = codeVisible ? 'Edit' : 'See code';
-  }, { threshold: 0.3 }).observe($('preview').parentElement);
-  $('bar-top').addEventListener('click', () => {
-    if (!codeVisible) {
-      $('preview').parentElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      return;
-    }
-    const first = document.querySelector(`fieldset[data-type="${state.type}"] input, fieldset[data-type="${state.type}"] textarea`);
-    (first ?? $('types')).scrollIntoView({ behavior: 'smooth', block: 'start' });
-    if (first)
-      first.focus({ preventScroll: true });
-  });
+  bindPhoneBar(state);
   if (navigator.share) {
     for (const id of ['share', 'bar-share']) {
       $(id).hidden = false;

@@ -1,29 +1,27 @@
 // Wires the form to the state and renders the state into the page. The DOM is a view of the
 // state and never the store. User text reaches the page only through textContent.
 
-import { encode, CapacityError, capacityBits, dataCodewords, EC_LEVELS } from '../qr/encode.js';
+import { encode, CapacityError, capacityBits, EC_LEVELS } from '../qr/encode.js';
+import { sizeOf } from '../qr/tables.js';
 import { drawCode } from '../render/canvas.js';
 import { build } from '../payload/builders.js';
 import { inspect, revealControls } from '../payload/inspect.js';
+import { parseWifi, readyMadeKind } from '../payload/detect.js';
 import { STYLE, FIELDS, MAX_TEXT, coerce, applySettings, styleToJson, defaultState } from './state.js';
 import { assess } from './scannability.js';
 import { logoBox } from '../render/logo.js';
 import { logoFromFile, logoFromIcon, logoFromText, recolourLogo, describeLogo } from './logo.js';
-
-const $ = id => document.getElementById(id);
+import { $, clear } from './dom.js';
+import { MM_PER_INCH, moduleMm, effectiveLevel, encodeOptions, logoOptions, styleOptions, smallestVersion, describe } from './model.js';
 
 const LEVEL_NAMES = { L: 'Low', M: 'Medium', Q: 'Quartile', H: 'High' };
+const PREVIEW_PIXELS = 640;
 
 // What the last render produced, for the actions that export it.
 let latest = { code: null, payload: '', type: 'url' };
 
 export function current() {
   return latest;
-}
-
-function clear(element) {
-  while (element.firstChild)
-    element.removeChild(element.firstChild);
 }
 
 function li(parent, text, className) {
@@ -34,45 +32,8 @@ function li(parent, text, className) {
   parent.append(item);
 }
 
-export function describe(state) {
-  const f = state.fields[state.type];
-  switch (state.type) {
-    case 'url': {
-      try {
-        return `link to ${new URL(build('url', f)).hostname}`;
-      } catch {
-        return 'link';
-      }
-    }
-    case 'wifi': return `Wi-Fi network ${f.ssid}`;
-    case 'contact': return `contact ${[f.firstName, f.lastName].filter(Boolean).join(' ') || f.org}`;
-    case 'email': return `email to ${f.to}`;
-    case 'sms': return `text message to ${f.number}`;
-    case 'phone': return `phone number ${f.number}`;
-    case 'event': return `event ${f.title}`;
-    case 'geo': return 'map location';
-    case 'crypto': return `${f.coin} address`;
-    default: return 'text';
-  }
-}
-
-// The printed width of one module, when a physical size is set.
-export const MM_PER_INCH = 25.4;
-
-export function widthMm(state) {
-  return state.style.unit === 'in' ? state.style.physical * MM_PER_INCH : state.style.physical;
-}
-
-export function moduleMm(state, code) {
-  return code ? widthMm(state) / (code.size + 2 * state.style.quiet) : null;
-}
-
-export function effectiveLevel(state) {
-  return state.logo ? 'H' : state.style.ecLevel;
-}
-
-export function encodeOptions(state) {
-  return { ecLevel: effectiveLevel(state), boostEc: state.style.boost, eci: state.style.eci };
+function firstField(state) {
+  return document.querySelector(`fieldset[data-type="${state.type}"] input, fieldset[data-type="${state.type}"] textarea`);
 }
 
 function showPayload(state, payload) {
@@ -110,40 +71,40 @@ function showPayload(state, payload) {
   pre.append(mark, shown.slice(at + host.length));
 }
 
-// The smallest version whose data area holds `bits` at a level, or null past version 40.
-function smallestVersion(bits, level) {
-  for (let v = 1; v <= 40; v++)
-    if (dataCodewords(v, level) * 8 >= bits)
-      return v;
-  return null;
-}
-
 function showStats(state, code) {
   const used = Math.ceil(code.dataBits / 8);
   const room = code.capacityBits / 8;
   const kind = code.version <= 4 ? 'Small' : code.version <= 12 ? 'Medium' : 'Dense';
-  $('stats').textContent = `${kind} code: ${code.size} × ${code.size} squares. Shorter content makes a smaller code that scans from further away.`;
-  const forced = state.logo && state.style.ecLevel !== 'H' ? ' (High because of the logo)' : '';
-  const byLevel = EC_LEVELS.map(level => {
-    const v = smallestVersion(code.dataBits, level);
-    return `${LEVEL_NAMES[level]} ${v === null ? 'too long' : `${v * 4 + 17} × ${v * 4 + 17}`}`;
+  $('stats').textContent = `${kind} code: ${code.size} × ${code.size} squares. Shorter content means fewer, bigger squares at the same print width, so it scans from further away.`;
+  const asked = effectiveLevel(state);
+  let level = `${LEVEL_NAMES[code.ecLevel]} correction`;
+  if (state.logo && state.style.ecLevel !== 'H')
+    level += ' (High because of the logo)';
+  else if (code.ecLevel !== asked)
+    level += ` (raised from ${LEVEL_NAMES[asked]} because it cost no extra size)`;
+  const byLevel = EC_LEVELS.map(l => {
+    const v = smallestVersion(code.dataBits, l);
+    return `${LEVEL_NAMES[l]} ${v === null ? 'too long' : `${sizeOf(v)} × ${sizeOf(v)}`}`;
   });
-  $('size-why').textContent = `Version ${code.version}, ${used} of ${room} bytes used at ${LEVEL_NAMES[code.ecLevel]} correction${forced}. The same content at each level: ${byLevel.join(' · ')}. Longer content or more correction adds 4 squares a side.`;
+  $('size-why').textContent = `${used} of ${room} bytes of room used, at ${level}. Codes grow in steps of 4 squares a side; this one has room for ${room - used} more bytes before the next step. The same content at each level: ${byLevel.join(' · ')}.`;
 }
 
 function capacityWarning(state, code, findings) {
   const level = effectiveLevel(state);
   const limit = capacityBits(level);
-  const share = code.dataBits / limit;
-  if (share > 0.8)
-    findings.push({ level: 'warn', text: `${Math.ceil(code.dataBits / 8)} of the ${limit / 8} bytes a ${LEVEL_NAMES[level]} code can hold at most. Lower the error correction or shorten the content.` });
+  if (code.dataBits / limit > 0.8)
+    findings.push({ level: 'warn', text: `${Math.ceil(code.dataBits / 8)} of the ${limit / 8} bytes a ${LEVEL_NAMES[level]} code can hold at most. ${state.logo ? 'Remove the logo or shorten the content.' : 'Lower the error correction or shorten the content.'}` });
 }
 
 function tooLong(state, err) {
-  const over = Math.ceil((err.neededBits - err.availableBits) / 8);
   const level = effectiveLevel(state);
+  if (!Number.isFinite(err.neededBits))
+    return 'Too much for one code, even at the largest size. Shorten the content.';
+  const over = Math.ceil((err.neededBits - err.availableBits) / 8);
   let text = `Too much for one code: about ${over} bytes over the limit at ${LEVEL_NAMES[level]} correction.`;
-  if (level !== 'L' && err.neededBits <= capacityBits('L'))
+  if (state.logo)
+    text += ' Remove the logo or shorten the content.';
+  else if (level !== 'L' && err.neededBits <= capacityBits('L'))
     text += ' It fits at Low.';
   return text;
 }
@@ -160,32 +121,33 @@ function showScannability(state, code) {
     li(list, `${factor.name}: ${factor.text}`, factor.rating);
 }
 
+// The browser's own reader, where it has one, checks the preview once typing pauses.
 let detector = null;
 let checks = 0;
-async function selfCheck(payload) {
-  const out = $('self-check');
+let checkTimer = 0;
+function selfCheck(payload) {
   const check = ++checks;
-  if (!('BarcodeDetector' in window)) {
-    out.textContent = '';
+  clearTimeout(checkTimer);
+  if (!('BarcodeDetector' in window))
     return;
-  }
-  try {
-    if (detector === null) {
-      const formats = await BarcodeDetector.getSupportedFormats();
-      detector = formats.includes('qr_code') ? new BarcodeDetector({ formats: ['qr_code'] }) : false;
-    }
-    if (!detector) {
+  checkTimer = setTimeout(async () => {
+    const out = $('self-check');
+    try {
+      if (detector === null) {
+        const formats = await BarcodeDetector.getSupportedFormats();
+        detector = formats.includes('qr_code') ? new BarcodeDetector({ formats: ['qr_code'] }) : false;
+      }
+      if (!detector)
+        return;
+      const found = await detector.detect($('preview'));
+      if (check !== checks)
+        return;
+      const ok = found.some(b => b.rawValue === payload);
+      out.textContent = ok ? 'This browser reads the preview back correctly.' : 'This browser could not read the preview back. Try a phone before printing.';
+    } catch {
       out.textContent = '';
-      return;
     }
-    const found = await detector.detect($('preview'));
-    if (check !== checks)
-      return;
-    const ok = found.some(b => b.rawValue === payload);
-    out.textContent = ok ? 'This browser reads the preview back correctly.' : 'This browser could not read the preview back. Try a phone before printing.';
-  } catch {
-    out.textContent = '';
-  }
+  }, 400);
 }
 
 // Called only from the controls, so settings that arrived in a link are not kept unless the
@@ -196,6 +158,11 @@ export function saveStyle(state) {
   } catch {
     // Storage may be unavailable; the page works without it.
   }
+}
+
+function printLabel(state) {
+  const what = state.type === 'wifi' ? 'Print guest card' : 'Print';
+  return `${what} (${state.style.physical} ${state.style.unit} wide)`;
 }
 
 export function render(state) {
@@ -217,16 +184,12 @@ export function render(state) {
   preview.hidden = code === null;
   $('empty').hidden = code !== null;
   $('caption-out').textContent = code ? state.style.caption : '';
-  state.logo = recolourLogo(state.logo, state.style.dark);
   if (code) {
     const total = code.size + 2 * state.style.quiet;
     drawCode(preview, code, {
-      quiet: state.style.quiet,
-      pixelsPerModule: Math.max(1, Math.floor(640 / total)),
-      dark: state.style.dark,
-      light: state.style.light,
-      rounded: state.style.rounded,
-      logo: state.logo ? { image: state.logo.image, fraction: state.style.logoFraction, shape: state.style.logoShape } : null,
+      ...styleOptions(state),
+      pixelsPerModule: Math.max(1, Math.floor(PREVIEW_PIXELS / total)),
+      logo: logoOptions(state),
     });
     preview.setAttribute('aria-label', `QR code: ${describe(state)}`);
     showStats(state, code);
@@ -235,42 +198,43 @@ export function render(state) {
     selfCheck(payload);
   } else {
     checks++;
-    $('stats').textContent = '';
-    $('size-why').textContent = '';
-    $('scan-overall').textContent = '';
-    $('scan-overall').className = 'rating';
-    clear($('scan-factors'));
     $('self-check').textContent = '';
   }
+  $('why-size').hidden = code === null;
+  $('meter').hidden = code === null;
   const list = $('findings');
   clear(list);
   for (const finding of findings)
     li(list, finding.text, finding.level);
   showPayload(state, payload);
-  for (const button of document.querySelectorAll('[data-png-size], #download-custom, #download-svg, #copy-image, #share, #print, #copy-text, #bar-save, #bar-share'))
+  $('contains').hidden = payload === '';
+  for (const button of document.querySelectorAll('[data-needs-code]'))
     if (!button.dataset.busy)
       button.disabled = code === null;
   $('take-empty').hidden = code !== null;
-  $('print').textContent = `${state.type === 'wifi' ? 'Print guest card' : 'Print'} (${state.style.physical} ${state.style.unit} wide)`;
-  announce(code ? $('scan-overall').textContent : '');
+  $('take-empty').textContent = payload === '' ? 'Type something in 01 to make a code.' : 'No code yet. See the message in 02.';
+  $('print').textContent = printLabel(state);
+  announce(code ? $('scan-overall').textContent : `No code. ${error.textContent || findings[0]?.text || ''}`.trim());
 }
 
 // Screen readers hear one line per pause in typing, with the rating when it changed.
 let announceTimer = 0;
-let lastRating = '';
-function announce(rating) {
+let lastMessage = '';
+function announce(message) {
   clearTimeout(announceTimer);
   announceTimer = setTimeout(() => {
-    const changed = rating !== lastRating;
-    lastRating = rating;
-    $('announce').textContent = rating === '' ? '' : `Code updated.${changed ? ` Will it scan: ${rating}.` : ''}`;
+    if (message === lastMessage)
+      return;
+    const rating = ['Good', 'Risky', 'Poor'].includes(message);
+    $('announce').textContent = rating ? `Code updated. Will it scan: ${message}.` : message;
+    lastMessage = message;
   }, 800);
 }
 
 // What a control changes, as the word stamped on the code pane after each update.
 const CHANGE_LABELS = {
   quiet: 'border', dark: 'colours', light: 'colours', ecLevel: 'correction', boost: 'correction',
-  rounded: 'module shape', logoFraction: 'logo size', logoShape: 'logo pad', caption: 'caption',
+  rounded: 'square shape', logoFraction: 'logo size', logoShape: 'logo pad', caption: 'caption',
   physical: 'print size', unit: 'print size', invertedOk: 'contrast', eci: 'encoding',
 };
 
@@ -328,38 +292,13 @@ export function sync(state) {
   $('quiet-out').textContent = state.style.quiet;
   $('logo-out').textContent = Math.round(state.style.logoFraction * 100);
   $('custom-size').value = state.style.size;
+  $('s-physical').step = state.style.unit === 'in' ? '0.1' : '1';
   echoAddress(state);
 }
 
 function echoAddress(state) {
   const address = state.fields.crypto.address.replace(/\s+/g, '');
   $('address-echo').textContent = address === '' ? '' : address.match(/.{1,4}/g).join(' ');
-}
-
-const READY_MADE = [
-  [/^BEGIN:VCARD/i, 'contact card'],
-  [/^MECARD:/i, 'contact card'],
-  [/^BEGIN:VCALENDAR/i, 'calendar event'],
-  [/^mailto:/i, 'email link'],
-  [/^(tel|sms|smsto):/i, 'phone link'],
-  [/^geo:/i, 'location'],
-];
-
-// The fields of a WIFI:T:..;S:..;P:..;H:..;; string, unescaped, or null.
-export function parseWifi(text) {
-  if (!/^WIFI:/i.test(text.trim()))
-    return null;
-  const fields = {};
-  const body = text.trim().slice(5);
-  for (const part of body.split(/(?<!\\);/)) {
-    const colon = part.indexOf(':');
-    if (colon > 0)
-      fields[part.slice(0, colon).toUpperCase()] = part.slice(colon + 1).replace(/\\(.)/g, '$1');
-  }
-  if (!fields.S)
-    return null;
-  const security = ['WEP', 'nopass'].includes(fields.T) ? fields.T : fields.T === undefined || fields.T === '' ? 'nopass' : 'WPA';
-  return { ssid: fields.S, password: fields.P ?? '', security, hidden: fields.H === 'true' };
 }
 
 // Pasting a finished payload offers to fill the matching form, or to use the text as-is under
@@ -372,28 +311,41 @@ function offerSwitch(state, pasted) {
     button.textContent = `This is a Wi-Fi code for the network "${wifi.ssid}". Fill in the Wi-Fi form from it?`;
     button.onclick = () => {
       state.type = 'wifi';
-      Object.assign(state.fields.wifi, wifi);
+      state.fields.wifi = applySettings(defaultState(), key => (key === 'type' ? 'wifi' : wifi[key.slice(2)]), { content: true }).fields.wifi;
       hint.hidden = true;
       sync(state);
       render(state);
+      stamp('type');
     };
     hint.hidden = false;
     return;
   }
-  const match = READY_MADE.find(([pattern]) => pattern.test(pasted.trim()));
-  if (!match || state.type === 'text') {
+  const kind = readyMadeKind(pasted);
+  if (!kind || state.type === 'text') {
     hint.hidden = true;
     return;
   }
-  button.textContent = `This looks like a ready-made ${match[1]}. Use it exactly as pasted?`;
+  button.textContent = `This looks like a ready-made ${kind}. Use it exactly as pasted?`;
   button.onclick = () => {
     state.type = 'text';
-    state.fields.text.text = pasted.trim();
+    state.fields.text.text = coerce('string', pasted.trim());
     hint.hidden = true;
     sync(state);
     render(state);
+    stamp('type');
   };
   hint.hidden = false;
+}
+
+// A print width typed in one unit is converted when the unit changes, so 50 mm stays 50 mm.
+function changeUnit(state, unit) {
+  if (unit === state.style.unit)
+    return;
+  const mm = state.style.unit === 'in' ? state.style.physical * MM_PER_INCH : state.style.physical;
+  state.style.unit = unit;
+  state.style.physical = coerce(STYLE.physical, unit === 'in' ? (mm / MM_PER_INCH).toFixed(1) : Math.round(mm));
+  $('s-physical').value = state.style.physical;
+  $('s-physical').step = unit === 'in' ? '0.1' : '1';
 }
 
 export function bind(state) {
@@ -407,11 +359,8 @@ export function bind(state) {
     });
     // Arrow keys also fire click, with detail 0; only a pointer moves focus into the form.
     radio.addEventListener('click', e => {
-      if (e.detail === 0)
-        return;
-      const first = document.querySelector(`fieldset[data-type="${state.type}"] input, fieldset[data-type="${state.type}"] textarea`);
-      if (first)
-        first.focus();
+      if (e.detail > 0)
+        firstField(state)?.focus();
     });
   }
   for (const input of document.querySelectorAll('[data-field]')) {
@@ -435,7 +384,12 @@ export function bind(state) {
       const value = input.type === 'checkbox' ? input.checked : coerce(STYLE[name], input.value);
       if (value === undefined)
         return;
-      state.style[name] = value;
+      if (name === 'unit')
+        changeUnit(state, value);
+      else
+        state.style[name] = value;
+      if (name === 'dark')
+        state.logo = recolourLogo(state.logo, value);
       saveStyle(state);
       if (name === 'quiet')
         $('quiet-out').textContent = value;
@@ -443,14 +397,22 @@ export function bind(state) {
         $('logo-out').textContent = Math.round(value * 100);
       scheduleRender(state, CHANGE_LABELS[name] ?? name);
     });
+    // A number outside its range is clamped in the state; the field shows the clamped value.
+    if (input.type === 'number')
+      input.addEventListener('change', () => {
+        if (String(state.style[name]) !== input.value)
+          input.value = state.style[name];
+      });
   }
+  $('switch-dismiss').addEventListener('click', () => {
+    $('switch-hint').hidden = true;
+  });
   // Shown by default: a typo is the usual reason a guest card fails.
   $('show-password').addEventListener('click', () => {
     const field = $('f-password');
     const show = field.type === 'password';
     field.type = show ? 'text' : 'password';
     $('show-password').textContent = show ? 'Hide' : 'Show';
-    $('show-password').setAttribute('aria-pressed', String(show));
   });
 }
 
@@ -503,21 +465,29 @@ export function bindLogo(state) {
   $('logo-clear').addEventListener('click', () => setLogo(state, null));
 }
 
-// A link with content in it pre-fills nothing until the visitor asks.
-export function offerLinkContent(state, params) {
+// A link with content in it fills nothing until the visitor asks. `undo` puts back the style
+// the page had before the link, for the Ignore button.
+export function offerLinkContent(state, params, undo) {
   const banner = $('link-banner');
   const preview = applySettings(defaultState(), key => params.get(key), { content: true });
-  $('link-banner-text').textContent = `This link wants to fill in a ${describe(preview)}. Load it?`;
+  $('link-banner-text').textContent = `This link fills in the form with ${describe(preview)}. Load it?`;
   banner.hidden = false;
   $('load-link').onclick = () => {
     applySettings(state, key => params.get(key), { content: true });
     banner.hidden = true;
     sync(state);
     render(state);
+    stamp('link');
   };
   $('ignore-link').onclick = () => {
     banner.hidden = true;
+    undo();
     history.replaceState(null, '', location.pathname);
+    sync(state);
+    render(state);
   };
 }
 
+export function hideLinkBanner() {
+  $('link-banner').hidden = true;
+}

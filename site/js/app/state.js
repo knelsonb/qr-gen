@@ -33,7 +33,7 @@ export const STYLE = {
   rounded: B,
   size: { int: [64, 4096] },
   unit: ['mm', 'in'],
-  physical: { number: [5, 2000] },
+  physical: { number: [0.2, 2000] },
   caption: S,
   logoFraction: { number: [0.1, 0.3] },
   logoShape: SHAPES,
@@ -86,21 +86,28 @@ export function coerce(kind, raw) {
   return kind.int ? Math.round(clamped) : clamped;
 }
 
-// Style and type from a flat key-value source; content fields too when `content` is set.
+// Style and type from a flat key-value source, and the content fields too when `content` is
+// set. What the source leaves out goes back to its default, so a link replaces the page's
+// settings instead of mixing with them. The caption is content: it travels only with it.
 export function applySettings(state, get, { content = false } = {}) {
+  const defaults = defaultState();
   for (const [name, kind] of Object.entries(STYLE)) {
+    if (name === 'caption')
+      continue;
     const value = coerce(kind, get(name));
-    if (value !== undefined)
-      state.style[name] = value;
+    state.style[name] = value === undefined ? defaults.style[name] : value;
   }
   const type = coerce(TYPES, get('type'));
   if (type !== undefined)
     state.type = type;
+  if (content) {
+    const caption = coerce(STYLE.caption, get('caption'));
+    state.style.caption = caption === undefined ? '' : caption;
+  }
   if (content && type !== undefined)
     for (const [name, kind] of Object.entries(FIELDS[type])) {
       const value = coerce(kind, get(`f.${name}`));
-      if (value !== undefined)
-        state.fields[type][name] = value;
+      state.fields[type][name] = value === undefined ? defaults.fields[type][name] : value;
     }
   return state;
 }
@@ -119,8 +126,10 @@ export function serialize(state, { content = false } = {}) {
   params.set('type', state.type);
   const defaults = defaultState().style;
   for (const [name, kind] of Object.entries(STYLE))
-    if (state.style[name] !== defaults[name])
+    if (name !== 'caption' && state.style[name] !== defaults[name])
       params.set(name, encodeValue(kind, state.style[name]));
+  if (content && state.style.caption !== '')
+    params.set('caption', state.style.caption);
   if (content)
     for (const [name, kind] of Object.entries(FIELDS[state.type])) {
       const value = state.fields[state.type][name];
@@ -142,7 +151,7 @@ export function parseFragment(hash) {
 
 export function hasContent(params) {
   for (const key of params.keys())
-    if (key.startsWith('f.'))
+    if (key.startsWith('f.') || key === 'caption')
       return true;
   return false;
 }

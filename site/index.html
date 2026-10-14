@@ -12,6 +12,23 @@
 <link rel="stylesheet" href="styles.css">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="manifest" href="manifest.webmanifest">
+<link rel="preload" href="fonts/BrewsterTechnical-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="modulepreload" href="js/app/ui.js">
+<link rel="modulepreload" href="js/app/actions.js">
+<link rel="modulepreload" href="js/app/state.js">
+<link rel="modulepreload" href="js/app/model.js">
+<link rel="modulepreload" href="js/qr/encode.js">
+<link rel="modulepreload" href="js/qr/segments.js">
+<link rel="modulepreload" href="js/qr/matrix.js">
+<link rel="modulepreload" href="js/qr/mask.js">
+<link rel="modulepreload" href="js/qr/tables.js">
+<link rel="modulepreload" href="js/qr/kanji.js">
+<link rel="modulepreload" href="js/qr/reed-solomon.js">
+<link rel="modulepreload" href="js/render/canvas.js">
+<link rel="modulepreload" href="js/render/svg.js">
+<link rel="modulepreload" href="js/render/logo.js">
+<link rel="modulepreload" href="js/payload/builders.js">
+<link rel="modulepreload" href="js/payload/inspect.js">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-title" content="QR">
 <meta name="mobile-web-app-capable" content="yes">
@@ -54,7 +71,7 @@
           <label><input type="radio" name="type" value="crypto"> Crypto</label>
         </fieldset>
 
-        <p id="switch-hint" class="hint" hidden><button type="button" id="switch-type" class="link"></button></p>
+        <p id="switch-hint" class="hint" aria-live="polite" hidden><button type="button" id="switch-type" class="link"></button> <button type="button" id="switch-dismiss" class="link">No thanks</button></p>
 
         <form id="form" autocomplete="off">
           <fieldset data-type="url">
@@ -75,7 +92,7 @@
             <label for="f-password">Password</label>
             <div class="row">
               <input id="f-password" data-field="password" type="text" spellcheck="false" autocapitalize="off">
-              <button type="button" id="show-password" class="secondary" aria-pressed="true">Hide</button>
+              <button type="button" id="show-password" class="secondary">Hide</button>
             </div>
             <label for="f-security">Security</label>
             <select id="f-security" data-field="security">
@@ -173,14 +190,14 @@
       </figure>
       <div class="pane-body">
         <p id="stats" class="stats"></p>
-        <details class="why" id="why-size"><summary>Why this size?</summary><p id="size-why" class="stats"></p></details>
+        <details class="why" id="why-size" hidden><summary>Why this size?</summary><p id="size-why" class="stats"></p></details>
         <p id="error" class="error" role="alert"></p>
-        <div class="meter">
+        <div class="meter" id="meter" hidden>
           <h3>Will it scan? <span id="scan-overall" class="rating"></span></h3>
           <ul id="scan-factors"></ul>
           <p id="self-check" class="hint"></p>
         </div>
-        <div class="contains">
+        <div class="contains" id="contains" hidden>
           <h3>This code contains</h3>
           <ul id="findings"></ul>
           <pre id="payload"></pre>
@@ -194,7 +211,7 @@
         <p id="take-empty" class="hint">Type something in 01 to make a code.</p>
         <p class="label-line">PRINT WIDTH</p>
         <div class="row">
-          <input id="s-physical" data-style="physical" type="number" min="5" max="2000" step="1" value="50" aria-label="Print width">
+          <input id="s-physical" data-style="physical" type="number" min="0.2" max="2000" step="1" value="50" aria-label="Print width">
           <select id="s-unit" data-style="unit" aria-label="Unit">
             <option value="mm">mm</option>
             <option value="in">inches</option>
@@ -203,24 +220,24 @@
         <p class="hint">Goes into the PNG and SVG as their print size, and the meter below the code checks the squares come out big enough. Rule of thumb: a code should be at least a tenth as wide as the distance it is scanned from.</p>
         <p class="label-line">PNG</p>
         <div class="row">
-          <button type="button" data-png-size="512">512 px</button>
-          <button type="button" data-png-size="1024" class="primary">1024 px</button>
-          <button type="button" data-png-size="2048">2048 px</button>
-          <button type="button" data-png-size="4096">4096 px</button>
+          <button type="button" data-png-size="512" data-needs-code>512 px</button>
+          <button type="button" data-png-size="1024" data-needs-code class="primary">1024 px</button>
+          <button type="button" data-png-size="2048" data-needs-code>2048 px</button>
+          <button type="button" data-png-size="4096" data-needs-code>4096 px</button>
           <span class="custom">
             <label for="custom-size" class="inline">Custom</label>
             <input id="custom-size" type="number" min="64" max="4096" step="1" value="1024" inputmode="numeric">
             <span class="unit">px</span>
-            <button type="button" id="download-custom">Download</button>
+            <button type="button" id="download-custom" data-needs-code>Download</button>
           </span>
         </div>
         <p class="hint">For print, 1024 px stays sharp up to about 8 cm (3 in) wide and 2048 px up to about 17 cm (7 in). Bigger than that, use SVG.</p>
         <p class="label-line">ALSO</p>
         <div class="row">
-          <button type="button" id="download-svg">SVG</button>
-          <button type="button" id="copy-image">Copy image</button>
-          <button type="button" id="share" hidden>Share</button>
-          <button type="button" id="print">Print</button>
+          <button type="button" id="download-svg" data-needs-code>SVG</button>
+          <button type="button" id="copy-image" data-needs-code>Copy image</button>
+          <button type="button" id="share" data-needs-code hidden>Share</button>
+          <button type="button" id="print" data-needs-code>Print</button>
         </div>
         <p id="take-status" class="hint" aria-live="polite"></p>
       </div>
@@ -297,7 +314,7 @@
           <h3>Share these settings</h3>
           <div class="row">
             <button type="button" id="copy-link">Copy a link to these settings</button>
-            <button type="button" id="copy-text">Copy as text art (for chat or a terminal)</button>
+            <button type="button" id="copy-text" data-needs-code>Copy as text art (for chat or a terminal)</button>
           </div>
           <label class="check"><input type="checkbox" id="link-content"> Include the content in the link (anyone with the link sees it)</label>
           <p id="link-status" class="hint" aria-live="polite"></p>
@@ -329,7 +346,7 @@
 <details class="about" id="about">
   <summary>About, privacy and security</summary>
   <p>Everything on this page runs in your browser. The text you type, the codes you make and any logo you choose leave this device only when you save, copy or share them yourself. Once loaded, the only requests the page makes are for its own files from this site, so after one visit it works offline too; it sets no cookies and has no analytics, ads or third-party code. You can check this in your browser's developer tools, or go offline and keep using it.</p>
-  <p>Cloudflare, which fronts this site, and the server behind it see ordinary connection logs when you load the page, like any website. Your style settings, colours, border and the like, are kept on this device once you change them so they are there next time, and so is the count of codes you have made here. The content of a code and its caption are never kept, though both go into a settings link if you ask for the content to be included. <button type="button" id="forget" class="link">Forget my settings</button>.</p>
+  <p>Cloudflare, which fronts this site, and the server behind it see ordinary connection logs when you load the page, like any website. Your style settings, colours, border and the like, are kept on this device once you change them so they are there next time, and so is the count of codes you have made here. The content of a code and its caption are never kept, though both go into a settings link only if you ask for the content to be included. <button type="button" id="forget" class="link">Forget my settings</button>. <span id="forget-status" aria-live="polite"></span></p>
   <p>Links with settings in them can pre-fill this page, so look at what the code contains before you print or share it. The page warns about link shapes that are commonly abused, but a warning is a hint and does not prove a link safe.</p>
   <p>A printed code is permanent. This page makes plain codes that hold their content directly, so there is nothing to expire and no one is told when it is scanned.</p>
   <p>Keyboard: Ctrl+S (⌘S on a Mac) saves a PNG at the last size you picked, Ctrl+P prints, Ctrl+Shift+C copies the image.</p>
@@ -339,8 +356,8 @@
 <div id="print-area" class="print-only" aria-hidden="true"></div>
 
 <div class="toolbar" id="toolbar">
-  <button type="button" id="bar-share" hidden>Share</button>
-  <button type="button" id="bar-save">Save PNG</button>
+  <button type="button" id="bar-share" data-needs-code hidden>Share</button>
+  <button type="button" id="bar-save" data-needs-code>Save PNG</button>
   <button type="button" id="bar-top">See code</button>
 </div>
 
