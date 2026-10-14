@@ -7,7 +7,7 @@ const KEY = 'qr-count';
 function read() {
   try {
     const n = Number(localStorage.getItem(KEY));
-    return Number.isInteger(n) && n > 0 ? n : 0;
+    return Number.isInteger(n) && n > 0 && n <= Number.MAX_SAFE_INTEGER ? n : 0;
   } catch {
     return 0;
   }

@@ -20,7 +20,7 @@ for (const [name, value] of Object.entries(expected))
     assert.equal(page.headers.get(name), value, name);
 assert.match((await fetch(`${base}/sw.js`)).headers.get('cache-control') ?? '', /no-cache/);
 const files = readFileSync(new URL('../site/sw.js', import.meta.url), 'utf8').match(/^\s+'([^']+)',$/gm).map(l => l.trim().slice(1, -2));
-for (const file of files) {
+for (const file of [...files, '.well-known/security.txt', 'manifest.webmanifest']) {
   const r = await fetch(`${base}/${file === './' ? '' : file}`);
   assert.equal(r.status, 200, file);
 }

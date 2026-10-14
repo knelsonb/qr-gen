@@ -168,6 +168,10 @@ function print(state) {
   // The same SVG the download makes, parsed as a document; it holds only numbers, checked
   // colours, an escaped title and the page's own data URL.
   const parsed = new DOMParser().parseFromString(svgText(state, code), 'image/svg+xml');
+  if (parsed.querySelector('parsererror')) {
+    $('error').textContent = 'The print sheet could not be built. Try a plainer caption.';
+    return;
+  }
   const svg = document.importNode(parsed.documentElement, true);
   const size = `${widthMm(state) ?? 50}mm`;
   svg.setAttribute('width', size);
@@ -221,6 +225,20 @@ async function batch(state, format) {
   const buttons = [$('batch-png'), $('batch-svg')];
   for (const button of buttons)
     button.disabled = true;
+  try {
+    await makeBatch(state, format, lines, files, skipped, used);
+  } finally {
+    for (const button of buttons)
+      button.disabled = false;
+  }
+  if (files.length > 0) {
+    download(makeZip(files), 'qr-codes.zip');
+    bumpCount(files.length);
+  }
+  status('batch-status', skipped.length ? `Done: ${files.length} codes. Lines ${skipped.join(', ')} were too long or were script links, and were skipped.` : `Done: ${files.length} codes.`);
+}
+
+async function makeBatch(state, format, lines, files, skipped, used) {
   for (let i = 0; i < lines.length; i++) {
     $('batch-status').textContent = `Making ${i + 1} of ${lines.length}…`;
     if (i % 8 === 0)
@@ -245,13 +263,6 @@ async function batch(state, format) {
       files.push({ name: `${name}.png`, data: new Uint8Array(await blob.arrayBuffer()) });
     }
   }
-  for (const button of buttons)
-    button.disabled = false;
-  if (files.length > 0) {
-    download(makeZip(files), 'qr-codes.zip');
-    bumpCount(files.length);
-  }
-  status('batch-status', skipped.length ? `Done: ${files.length} codes. Lines ${skipped.join(', ')} were too long or were script links, and were skipped.` : `Done: ${files.length} codes.`);
 }
 
 async function copyLink(state) {

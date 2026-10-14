@@ -81,7 +81,11 @@ function rasteriseSvg(bytes) {
         reject(new Error(`The image is ${width}×${height}. Up to ${MAX_SIDE} pixels a side, please.`));
         return;
       }
-      resolve(drawFitted(image, width, height));
+      try {
+        resolve(drawFitted(image, width, height));
+      } catch {
+        reject(new Error('That SVG could not be drawn. Try exporting it as PNG.'));
+      }
     };
     image.onerror = () => reject(new Error('That SVG could not be drawn. Try exporting it as PNG.'));
     let binary = '';
@@ -95,8 +99,12 @@ export async function logoFromFile(file) {
   if (file.size > MAX_BYTES)
     throw new Error('The image is over 2 MB. A logo this small does not need that much.');
   const bytes = new Uint8Array(await file.arrayBuffer());
-  if (looksLikeSvg(bytes))
+  if (looksLikeSvg(bytes)) {
+    // Entity declarations are how an SVG is made expensive to parse; logos never need them.
+    if (/<!(ENTITY|DOCTYPE)/i.test(new TextDecoder().decode(bytes)))
+      throw new Error('That SVG has a DOCTYPE or entity block. Export it as a plain SVG or a PNG.');
     return finish('file', file.name, await rasteriseSvg(bytes));
+  }
   const info = readDimensions(bytes);
   if (info === null)
     throw new Error('Only PNG, JPEG, WebP and SVG images are accepted.');

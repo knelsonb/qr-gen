@@ -117,7 +117,7 @@ function showStats(state, code) {
     const v = smallestVersion(code.dataBits, level);
     return `${level} ${v === null ? 'too long' : `${v * 4 + 17}×${v * 4 + 17}`}`;
   });
-  $('size-why').textContent = `Size comes from content length and correction level, in steps of 4 modules a side. This content at each level: ${byLevel.join(' · ')}.`;
+  $('size-why').textContent = `Size by level: ${byLevel.join(' · ')}. Longer content or more correction adds 4 modules a side.`;
 }
 
 function capacityWarning(state, code, findings) {

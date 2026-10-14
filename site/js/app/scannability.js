@@ -29,11 +29,11 @@ export function assess(code, style, { logo = null, moduleMm = null } = {}) {
   if (isInverted(style.dark, style.light) && !style.invertedOk)
     factors.push({ name: 'Contrast', rating: 'poor', text: 'Light modules on a dark background. Many readers only look for dark on light.' });
   else if (ratio >= 4.5)
-    factors.push({ name: 'Contrast', rating: 'good', text: `Contrast ${ratio.toFixed(1)}:1.` });
+    factors.push({ name: 'Contrast', rating: 'good', text: `${ratio.toFixed(1)}:1 between modules and background.` });
   else if (ratio >= 3)
-    factors.push({ name: 'Contrast', rating: 'risky', text: `Contrast ${ratio.toFixed(1)}:1 is low. Darker modules or a lighter background would help.` });
+    factors.push({ name: 'Contrast', rating: 'risky', text: `${ratio.toFixed(1)}:1 is low. Darker modules or a lighter background would help.` });
   else
-    factors.push({ name: 'Contrast', rating: 'poor', text: `Contrast ${ratio.toFixed(1)}:1 is too low for most cameras.` });
+    factors.push({ name: 'Contrast', rating: 'poor', text: `${ratio.toFixed(1)}:1 is too low for most cameras.` });
 
   if (style.quiet >= 4)
     factors.push({ name: 'Border', rating: 'good', text: `${style.quiet} blank modules around the code.` });
