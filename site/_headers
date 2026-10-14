@@ -7,13 +7,7 @@
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Resource-Policy: same-origin
   Strict-Transport-Security: max-age=31536000; includeSubDomains
-  Cache-Control: public, max-age=3600
-
-/sw.js
   Cache-Control: no-cache
 
-/index.html
-  Cache-Control: no-cache
-
-/
-  Cache-Control: no-cache
+/fonts/*
+  Cache-Control: public, max-age=604800

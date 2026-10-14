@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import assert from 'node:assert/strict';
 
 const PORT = 9333;
-const SITE = 'http://127.0.0.1:8765/';
+const SITE = process.env.QR_SITE ?? 'http://127.0.0.1:8765/';
 const downloads = mkdtempSync(join(tmpdir(), 'qr-dl-'));
 const profile = mkdtempSync(join(tmpdir(), 'qr-profile-'));
 

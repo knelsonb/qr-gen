@@ -57,8 +57,9 @@ refused over 8,000. Content from a link is loaded only after the visitor clicks 
 ## Deploy
 
 Cloudflare Pages, Git integration, no build command, output directory `site`. The `_headers`
-file sets the Content-Security-Policy and the other response headers; `sw.js` is served with
-`Cache-Control: no-cache` so a new version is picked up on the next visit. Bump `VERSION` in
+file sets the Content-Security-Policy and the other response headers. Every file is served
+`no-cache` so the edge never pairs new HTML with old scripts after a deploy; the service worker
+keeps repeat visits off the network. Bump `VERSION` in
 `site/js/app/main.js` and `site/sw.js` together when files change; a test checks they match.
 
 In Cloudflare: Always Use HTTPS on, HSTS on, minimum TLS 1.2, and Rocket Loader, Auto Minify,

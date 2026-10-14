@@ -18,7 +18,8 @@ assert.equal(page.status, 200);
 for (const [name, value] of Object.entries(expected))
   if (name !== 'cache-control')
     assert.equal(page.headers.get(name), value, name);
-assert.match((await fetch(`${base}/sw.js`)).headers.get('cache-control') ?? '', /no-cache/);
+for (const file of ['sw.js', 'js/app/ui.js', 'styles.css', ''])
+  assert.match((await fetch(`${base}/${file}`)).headers.get('cache-control') ?? '', /no-cache/, `${file || 'index'} must revalidate`);
 const files = readFileSync(new URL('../site/sw.js', import.meta.url), 'utf8').match(/^\s+'([^']+)',$/gm).map(l => l.trim().slice(1, -2));
 for (const file of [...files, '.well-known/security.txt', 'manifest.webmanifest']) {
   const r = await fetch(`${base}/${file === './' ? '' : file}`);

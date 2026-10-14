@@ -65,7 +65,7 @@ test('the nginx config carries the same headers as _headers', () => {
     assert.ok(nginx.includes(`add_header ${name} "${value}" always;`), line);
   }
   assert.ok(nginx.includes('add_header Cache-Control $qr_cache_control always;'));
-  assert.ok(/sw\\.js\|index\\.html\)\?\$\s+"no-cache"/.test(nginx));
+  assert.ok(/default\s+"no-cache"/.test(nginx), 'scripts must revalidate so a deploy never mixes versions');
   assert.ok(!/^\s*location\b[^}]*add_header/m.test(nginx), 'add_header inside a location drops the server headers');
   assert.ok(nginx.includes('location ^~ /.well-known/'), 'the dot-file regex would deny security.txt without ^~');
 });
