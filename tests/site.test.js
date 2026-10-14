@@ -18,7 +18,7 @@ test('service worker caches every file the page is made of', () => {
     const path = dir ? `${dir}/${name}` : name;
     return statSync(join(site, path)).isDirectory() ? walk(path) : [path];
   });
-  const needed = walk('').filter(p => p.endsWith('.js') && p !== 'sw.js');
+  const needed = walk('').filter(p => p !== 'sw.js' && p !== '_headers' && !p.startsWith('.well-known/') && !p.startsWith('.wrangler/'));
   for (const file of needed)
     assert.ok(listed.has(file), `${file} is not in the service worker list`);
   for (const file of listed)
@@ -46,6 +46,19 @@ test('the page has no inline script or style and the meta CSP matches _headers',
   assert.equal(header.replace(/; frame-ancestors 'none'/, ''), meta);
 });
 
+test('every data-field and data-style in the page is in the schema, and the reverse', async () => {
+  const { FIELDS, STYLE } = await import('../site/js/app/state.js');
+  const html = read('index.html');
+  for (const [type, fields] of Object.entries(FIELDS)) {
+    const block = html.match(new RegExp(`<fieldset data-type="${type}"[^]*?</fieldset>`))[0];
+    const inPage = [...block.matchAll(/data-field="([^"]+)"/g)].map(m => m[1]).sort();
+    assert.deepEqual(inPage, Object.keys(fields).sort(), type);
+  }
+  // The PNG size has buttons instead of a data-style control.
+  const styles = [...html.matchAll(/data-style="([^"]+)"/g)].map(m => m[1]).sort();
+  assert.deepEqual(styles, Object.keys(STYLE).filter(k => k !== 'size').sort());
+});
+
 test('no innerHTML or eval in the app', () => {
   const walk = dir => readdirSync(join(site, dir)).flatMap(name => {
     const path = `${dir}/${name}`;
@@ -67,5 +80,6 @@ test('the nginx config carries the same headers as _headers', () => {
   assert.ok(nginx.includes('add_header Cache-Control $qr_cache_control always;'));
   assert.ok(/default\s+"no-cache"/.test(nginx), 'scripts must revalidate so a deploy never mixes versions');
   assert.ok(!/^\s*location\b[^}]*add_header/m.test(nginx), 'add_header inside a location drops the server headers');
-  assert.ok(nginx.includes('location ^~ /.well-known/'), 'the dot-file regex would deny security.txt without ^~');
+  assert.ok(nginx.includes('location = /.well-known/security.txt'), 'the dot-file regex would deny security.txt without an exact match');
+  assert.ok(nginx.includes('server_tokens off;') && nginx.includes('limit_except GET'));
 });

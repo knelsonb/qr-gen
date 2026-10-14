@@ -1,7 +1,10 @@
-// Offline support: every file the page is made of, cached on install, old caches dropped on
-// activate. The version below must match VERSION in js/app/main.js; a test checks that.
+// Offline support. Every file the page is made of is fetched once at install, under a cache
+// named for the version, and served from there. A new version is a new sw.js, which the
+// browser fetches fresh on each visit; its install replaces the whole set at once, so a visitor
+// never gets new HTML with old scripts. The version must match VERSION in js/app/main.js; a
+// test checks that, and the deploy script stamps both with the commit being served.
 
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 const CACHE = `qr-${VERSION}`;
 const FILES = [
   './',
@@ -17,6 +20,9 @@ const FILES = [
   'js/app/counter.js',
   'js/app/ui.js',
   'js/app/actions.js',
+  'js/app/export.js',
+  'js/app/model.js',
+  'js/app/dom.js',
   'js/app/logo.js',
   'js/app/icons.js',
   'js/app/state.js',
@@ -35,6 +41,7 @@ const FILES = [
   'js/payload/escape.js',
   'js/payload/builders.js',
   'js/payload/inspect.js',
+  'js/payload/detect.js',
   'js/io/crc32.js',
   'js/io/png.js',
   'js/io/zip.js',
@@ -42,7 +49,11 @@ const FILES = [
 ];
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)).then(() => self.skipWaiting()));
+  event.waitUntil(
+    caches.open(CACHE)
+      .then(cache => cache.addAll(FILES.map(file => new Request(file, { cache: 'no-cache' }))))
+      .then(() => self.skipWaiting()),
+  );
 });
 
 self.addEventListener('activate', event => {
@@ -53,8 +64,7 @@ self.addEventListener('activate', event => {
   );
 });
 
-// Only the files listed above are served from the cache, and each is refreshed from the network
-// for next time. Anything else goes straight to the network.
+// Only the files listed above are served from the cache; anything else goes to the network.
 self.addEventListener('fetch', event => {
   const scope = self.registration.scope;
   const url = event.request.url.split(/[?#]/)[0];
@@ -63,15 +73,5 @@ self.addEventListener('fetch', event => {
   const path = url.slice(scope.length) || './';
   if (!FILES.includes(path))
     return;
-  event.respondWith(
-    caches.open(CACHE).then(async cache => {
-      const cached = await cache.match(path);
-      const refresh = fetch(path, { cache: 'no-cache' }).then(response => {
-        if (response.ok)
-          event.waitUntil(cache.put(path, response.clone()));
-        return response;
-      }).catch(() => cached);
-      return cached ?? refresh;
-    }),
-  );
+  event.respondWith(caches.open(CACHE).then(cache => cache.match(path).then(cached => cached ?? fetch(event.request))));
 });

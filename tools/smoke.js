@@ -3,17 +3,22 @@
 // Run with the site served at http://127.0.0.1:8765/: node tools/smoke.js
 
 import { spawn, execFileSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import assert from 'node:assert/strict';
 
-const PORT = 9333;
+const PORT = 9300 + Math.floor(Math.random() * 600);
+const CHROME = process.env.CHROME ?? 'chromium';
 const SITE = process.env.QR_SITE ?? 'http://127.0.0.1:8765/';
 const downloads = mkdtempSync(join(tmpdir(), 'qr-dl-'));
 const profile = mkdtempSync(join(tmpdir(), 'qr-profile-'));
 
-const chrome = spawn('chromium', ['--headless=new', '--no-sandbox', '--disable-gpu', `--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`, '--window-size=1300,1100', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CHROME, ['--headless=new', '--no-sandbox', '--disable-gpu', `--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`, '--window-size=1300,1100', 'about:blank'], { stdio: 'ignore' });
+process.on('exit', () => {
+  chrome.kill();
+  rmSync(profile, { recursive: true, force: true });
+});
 
 async function debuggerUrl() {
   for (let i = 0; i < 100; i++) {
@@ -97,11 +102,12 @@ await new Promise(r => setTimeout(r, 800));
 // A link.
 await setInput('f-url', 'example.com/menu');
 assert.match(await text('stats'), /^(Small|Medium|Dense) code: \d+ × \d+ squares\./);
-assert.match(await text('size-why'), /Version \d+, \d+ of \d+ bytes used at \w+ correction/);
+assert.match(await text('size-why'), /^\d+ of \d+ bytes of room used, at \w+ correction/);
+assert.equal(await run("document.getElementById('why-size').hidden"), false);
 assert.equal(await text('scan-overall'), 'Good');
 assert.equal(await text('payload'), 'https://example.com/menu');
 assert.equal(await run("document.getElementById('preview').hidden"), false);
-assert.equal(await run("document.getElementById('preview').getAttribute('aria-label')"), 'QR code: link to example.com');
+assert.equal(await run("document.getElementById('preview').getAttribute('aria-label')"), 'QR code: a link to example.com');
 await run("document.querySelector('#more-panel').open = true");
 await screenshot('desktop');
 await send('Emulation.setDeviceMetricsOverride', { width: 400, height: 900, deviceScaleFactor: 2, mobile: true });
@@ -114,6 +120,7 @@ await settle();
 await setInput('f-url', 'javascript:alert(1)');
 assert.match(await text('findings'), /runs code/);
 assert.equal(await run("document.getElementById('preview').hidden"), true);
+assert.match(await text('take-empty'), /No code yet/);
 assert.equal(await run("document.querySelector('[data-png-size=\"1024\"]').disabled"), true);
 
 // A look-alike host is warned about but still encoded.
@@ -127,7 +134,7 @@ await setInput('f-ssid', 'Café;Bar');
 await setInput('f-password', 'p:w');
 assert.equal(await text('payload'), ['WIFI:T:WPA;S:Caf', 'é\\', ';Bar;P:p\\:w;;'].join(''));
 assert.match(await text('findings'), /password is in the code/);
-assert.equal(await run("document.getElementById('preview').getAttribute('aria-label')"), 'QR code: Wi-Fi network Café;Bar');
+assert.equal(await run("document.getElementById('preview').getAttribute('aria-label')"), 'QR code: the Wi-Fi network Café;Bar');
 
 // Border slider drives the rating.
 await setInput('s-quiet', '1');
@@ -135,10 +142,13 @@ assert.equal(await text('scan-overall'), 'Poor');
 await setInput('s-quiet', '4');
 assert.equal(await text('scan-overall'), 'Good');
 
-// Print width feeds the print-size factor and the print button's label.
+// Print width feeds the print-size factor and the print button's label; the unit converts.
 await setInput('s-physical', '10');
 assert.match(await text('scan-factors'), /Print size: squares of/);
 assert.match(await text('print'), /Print guest card \(10 mm wide\)/);
+await setInput('s-unit', 'in');
+assert.equal(await run("document.getElementById('s-physical').value"), '0.4');
+await setInput('s-unit', 'mm');
 await setInput('s-physical', '50');
 assert.match(await text('scan-factors'), /Print size: each square prints/);
 
@@ -167,7 +177,7 @@ await setInput('f-url', 'https://qr.thetallkeith.com/logo');
 await click('[data-png-size="1024"]');
 await waitForDownloads(1);
 await new Promise(r => setTimeout(r, 300));
-assert.equal(execFileSync('zbarimg', ['-q', '--raw', join(downloads, 'link-to-qr-thetallkeith-com.png')]).toString().trim(), 'https://qr.thetallkeith.com/logo');
+assert.equal(execFileSync('zbarimg', ['-q', '--raw', join(downloads, 'a-link-to-qr-thetallkeith-com.png')]).toString().trim(), 'https://qr.thetallkeith.com/logo');
 await setInput('s-logoShape', 'none');
 assert.match(await text('scan-factors'), /Logo pad/);
 await click('#logo-clear');
@@ -186,7 +196,7 @@ await click('#batch-svg');
 await waitForDownloads(3);
 await new Promise(r => setTimeout(r, 300));
 const files = readdirSync(downloads).sort();
-assert.deepEqual(files, ['link-to-qr-thetallkeith-com.png', 'qr-codes.zip', 'smoke-test.png', 'smoke-test.svg']);
+assert.deepEqual(files, ['a-link-to-qr-thetallkeith-com.png', 'qr-codes.zip', 'smoke-test.png', 'smoke-test.svg']);
 assert.equal(execFileSync('zbarimg', ['-q', '--raw', join(downloads, 'smoke-test.png')]).toString().trim(), 'https://qr.thetallkeith.com/smoke');
 assert.ok(readFileSync(join(downloads, 'smoke-test.svg'), 'utf8').includes('<title>Smoke test</title>'));
 execFileSync('unzip', ['-tq', join(downloads, 'qr-codes.zip')]);
@@ -196,6 +206,7 @@ assert.equal(execFileSync('unzip', ['-Z1', join(downloads, 'qr-codes.zip')]).toS
 await send('Page.navigate', { url: `${SITE}#v=1&type=wifi&ecLevel=H&f.ssid=Guest&f.password=pw` });
 await new Promise(r => setTimeout(r, 800));
 assert.equal(await run("document.getElementById('link-banner').hidden"), false);
+assert.match(await text('link-banner-text'), /fills in the form with the Wi-Fi network Guest/);
 assert.notEqual(await run("document.getElementById('f-ssid').value"), 'Guest');
 assert.equal(await run("document.getElementById('s-ecLevel').value"), 'H');
 await click('#load-link');
@@ -215,6 +226,7 @@ await setInput('s-caption', 'not kept');
 await run("(() => { const el = document.getElementById('f-url'); const e = new Event('paste', { bubbles: true }); e.clipboardData = { getData: () => 'WIFI:T:WPA;S:Caf\\u00e9 Guest;P:pass\\\\;word;H:true;;' }; el.dispatchEvent(e); })()");
 assert.equal(await run("document.getElementById('switch-hint').hidden"), false);
 assert.match(await text('switch-type'), /Wi-Fi code for the network "Café Guest"/);
+assert.equal(await run("document.getElementById('switch-hint').hidden"), false);
 await click('#switch-type');
 assert.equal(await run("document.getElementById('f-ssid').value"), 'Café Guest');
 assert.equal(await run("document.getElementById('f-password').value"), 'pass;word');
@@ -228,6 +240,7 @@ assert.equal(await run("document.getElementById('s-caption').value"), '');
 await click('#forget');
 assert.equal(await run("document.getElementById('s-ecLevel').value"), 'M');
 assert.equal(await run("localStorage.getItem('qr-settings')"), null);
+assert.match(await text('forget-status'), /forgotten/);
 assert.match(await text('count-line'), /NOTHING SAVED HERE YET/);
 await setInput('f-url', 'https://example.com/custom');
 await setInput('custom-size', '300');

@@ -24,7 +24,9 @@ function buildTable() {
         if (text.length !== 1 || text === '�')
           continue;
         const code = (lead << 8) | trail;
-        if (code > 0xebbf)
+        // Row 13 (0x8740 to 0x879C) is a vendor extension whose characters JIS X 0208 also
+        // reaches elsewhere; readers expect the JIS code, so the first mapping found wins.
+        if (code > 0xebbf || (code >= 0x8740 && code <= 0x879c) || codes.has(text))
           continue;
         codes.set(text, code);
       }

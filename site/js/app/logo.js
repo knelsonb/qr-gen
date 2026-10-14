@@ -19,7 +19,8 @@ function readDimensions(bytes) {
   if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
     let i = 2;
     while (i + 9 < bytes.length) {
-      if (bytes[i] !== 0xff) {
+      // 0xFF 0xFF is padding before a marker, which the spec allows.
+      if (bytes[i] !== 0xff || bytes[i + 1] === 0xff) {
         i++;
         continue;
       }

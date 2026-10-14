@@ -10,9 +10,18 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      CI: 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
-      - run: node --test tests/
+      # zbar is the independent decoder the round-trip tests need; the runner is thrown away.
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq zbar-tools unzip
+      - run: node --test "tests/*.test.js"
+      - name: smoke test in headless Chrome
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory site &
+          sleep 1
+          CHROME=google-chrome node tools/smoke.js

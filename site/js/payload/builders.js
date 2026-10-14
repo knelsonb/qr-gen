@@ -113,8 +113,9 @@ export function email(f) {
   return `mailto:${encodeURIComponent(to).replace(/%40/g, '@')}${query.length ? `?${query.join('&')}` : ''}`;
 }
 
+// A colon would break the SMSTO:number:message split, so it goes with the other punctuation.
 export function phoneNumber(value) {
-  return trim(value).replace(/[\s().-]/g, '');
+  return trim(value).replace(/[\s().:-]/g, '');
 }
 
 export function phone(f) {
@@ -132,10 +133,11 @@ export function sms(f) {
 
 const DECIMAL = /^-?\d+(\.\d+)?$/;
 
+// The coordinates go out as typed: Number would turn tiny values into exponent notation.
 export function geo(f) {
-  const lat = Number(trim(f.lat));
-  const lng = Number(trim(f.lng));
-  if (!DECIMAL.test(trim(f.lat)) || !DECIMAL.test(trim(f.lng)) || Math.abs(lat) > 90 || Math.abs(lng) > 180)
+  const lat = trim(f.lat);
+  const lng = trim(f.lng);
+  if (!DECIMAL.test(lat) || !DECIMAL.test(lng) || Math.abs(Number(lat)) > 90 || Math.abs(Number(lng)) > 180)
     return '';
   if (f.format === 'geo')
     return `geo:${lat},${lng}`;
@@ -162,8 +164,9 @@ export function calendarEvent(f) {
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//qr.thetallkeith.com//EN', 'BEGIN:VEVENT'];
   lines.push(`SUMMARY:${escapeIcal(title)}`);
   lines.push(allDay ? `DTSTART;VALUE=DATE:${start}` : `DTSTART:${start}`);
+  // An end at or before the start makes an invalid event, so it is left out.
   const end = icalStamp(trim(f.end), allDay);
-  if (end !== null)
+  if (end !== null && end > start)
     lines.push(allDay ? `DTEND;VALUE=DATE:${end}` : `DTEND:${end}`);
   if (trim(f.location)) lines.push(`LOCATION:${escapeIcal(trim(f.location))}`);
   if (trim(f.description)) lines.push(`DESCRIPTION:${escapeIcal(trim(f.description))}`);
@@ -176,8 +179,8 @@ export function cryptoAddress(f) {
   if (address === '')
     return '';
   const coin = f.coin === 'ethereum' ? 'ethereum' : 'bitcoin';
-  // Wallets expect a plain decimal, so the amount goes out as typed once it is one.
-  const amount = trim(f.amount);
+  // Wallets expect a plain decimal; .5 and 5. are tidied to 0.5 and 5.
+  const amount = trim(f.amount).replace(/^\./, '0.').replace(/\.$/, '');
   const query = DECIMAL.test(amount) && Number(amount) > 0 ? `?amount=${amount}` : '';
   return `${coin}:${address}${query}`;
 }

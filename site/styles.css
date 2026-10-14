@@ -256,6 +256,7 @@ figcaption:empty { display: none; }
 .stats { font: 13px/1.5 var(--mono); color: #444; margin: 0 0 12px; }
 .stats:empty { display: none; }
 .why { margin: 0 0 12px; }
+#forget-status { font-size: 14px; color: var(--good); }
 .why summary { cursor: pointer; font: 13px/1.5 var(--mono); color: var(--blue); }
 .why p { margin: 6px 0 0; }
 

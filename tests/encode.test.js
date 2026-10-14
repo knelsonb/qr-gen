@@ -126,6 +126,8 @@ const zbar = (() => {
     execFileSync('zbarimg', ['--version'], { stdio: 'ignore' });
     return true;
   } catch {
+    if (process.env.CI)
+      throw new Error('zbarimg is required in CI');
     return false;
   }
 })();
