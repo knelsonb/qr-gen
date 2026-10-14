@@ -82,7 +82,7 @@ export function vcard(f) {
   return `${lines.join('\r\n')}\r\n`;
 }
 
-// The compact contact format; about half the size of a vCard.
+// The compact contact format, smaller than a vCard.
 export function mecard(f) {
   const c = contactLines(f);
   if (c.first === '' && c.last === '' && c.org === '')
@@ -153,7 +153,7 @@ function icalStamp(local, allDay) {
   return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
 }
 
-export function event(f) {
+export function calendarEvent(f) {
   const title = trim(f.title);
   const allDay = Boolean(f.allDay);
   const start = icalStamp(trim(f.start), allDay);
@@ -171,7 +171,7 @@ export function event(f) {
   return `${lines.map(foldIcal).join('\r\n')}\r\n`;
 }
 
-export function crypto(f) {
+export function cryptoAddress(f) {
   const address = trim(f.address).replace(/\s+/g, '');
   if (address === '')
     return '';
@@ -182,7 +182,7 @@ export function crypto(f) {
   return `${coin}:${address}${query}`;
 }
 
-export const BUILDERS = { url, text, wifi, contact, email, sms, phone, event, geo, crypto };
+export const BUILDERS = { url, text, wifi, contact, email, sms, phone, event: calendarEvent, geo, crypto: cryptoAddress };
 
 export function build(type, fields) {
   const builder = BUILDERS[type];

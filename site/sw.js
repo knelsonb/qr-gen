@@ -1,5 +1,5 @@
-// Offline support: the handful of files the page is made of, cached on install. The version
-// below must match VERSION in js/app/main.js; a test checks that. Old caches go on activate.
+// Offline support: every file the page is made of, cached on install, old caches dropped on
+// activate. The version below must match VERSION in js/app/main.js; a test checks that.
 
 const VERSION = '1.1.0';
 const CACHE = `qr-${VERSION}`;

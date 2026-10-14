@@ -96,7 +96,7 @@
               <div><label for="f-phone">Phone</label><input id="f-phone" data-field="phone" type="tel"></div>
               <div><label for="f-mobile">Mobile</label><input id="f-mobile" data-field="mobile" type="tel"></div>
               <div><label for="f-email">Email</label><input id="f-email" data-field="email" type="email"></div>
-              <div><label for="f-curl">Website</label><input id="f-curl" data-field="url" type="text" inputmode="url"></div>
+              <div><label for="f-website">Website</label><input id="f-website" data-field="url" type="text" inputmode="url"></div>
             </div>
             <label for="f-street">Street</label><input id="f-street" data-field="street" type="text">
             <div class="grid2">
@@ -126,7 +126,7 @@
           </fieldset>
 
           <fieldset data-type="event" hidden>
-            <label for="f-title2">Title</label><input id="f-title2" data-field="title" type="text">
+            <label for="f-event-title">Title</label><input id="f-event-title" data-field="title" type="text">
             <div class="grid2">
               <div><label for="f-start">Starts</label><input id="f-start" data-field="start" type="datetime-local"></div>
               <div><label for="f-end">Ends</label><input id="f-end" data-field="end" type="datetime-local"></div>
@@ -166,7 +166,7 @@
 
     <section class="pane pane-code" aria-labelledby="code-title">
       <div class="pane-title"><h2 id="code-title">THE CODE</h2><span id="code-stamp">02</span></div>
-      <figure class="preview drawing">
+      <figure class="preview">
         <canvas id="preview" role="img" aria-label="QR code"></canvas>
         <p id="empty" class="empty">Your code appears here as you type.</p>
         <figcaption id="caption-out"></figcaption>
@@ -202,14 +202,14 @@
         </div>
         <p class="hint">Goes into the PNG and SVG as their print size, and the meter below the code checks the squares come out big enough. Rule of thumb: a code should be at least a tenth as wide as the distance it is scanned from.</p>
         <p class="label-line">PNG</p>
-        <div class="row sizes">
+        <div class="row">
           <button type="button" data-png-size="512">512 px</button>
           <button type="button" data-png-size="1024" class="primary">1024 px</button>
           <button type="button" data-png-size="2048">2048 px</button>
           <button type="button" data-png-size="4096">4096 px</button>
           <span class="custom">
             <label for="custom-size" class="inline">Custom</label>
-            <input id="custom-size" type="number" min="64" max="4096" step="1" value="1500" inputmode="numeric">
+            <input id="custom-size" type="number" min="64" max="4096" step="1" value="1024" inputmode="numeric">
             <span class="unit">px</span>
             <button type="button" id="download-custom">Download</button>
           </span>
@@ -233,7 +233,7 @@
           <h3>Logo in the middle</h3>
           <p class="hint">A logo covers part of the code, so error correction is set to High while one is on, and the pad behind it snaps to the grid of squares. Scan it with a phone before printing.</p>
           <p class="label-line">AN ICON</p>
-          <div class="row icons" id="icon-row">
+          <div class="row icons">
             <button type="button" class="icon" data-icon="link" aria-label="Link icon" title="Link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg></button>
             <button type="button" class="icon" data-icon="wifi" aria-label="Wi-Fi icon" title="Wi-Fi"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg></button>
             <button type="button" class="icon" data-icon="email" aria-label="Email icon" title="Email"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg></button>

@@ -10,20 +10,25 @@ server, no analytics.
 ```
 site/                 the published directory
   index.html, styles.css, sw.js, manifest.webmanifest, _headers, favicon.svg, icon-*.png
+  fonts/              Brewster Technical, WOFF2
+  .well-known/        security.txt
   js/qr/              the encoder: ISO/IEC 18004 versions 1 to 40, levels L M Q H
-  js/render/          the module grid as SVG, canvas or text
+  js/render/          the module grid as SVG, canvas or text, and the logo geometry
   js/payload/         form fields to payload strings, and what a reader will do with them
   js/io/              PNG DPI chunk, stored zip, downloads, CRC
-  js/app/             state, UI wiring, actions, logo loading, entry point
+  js/app/             state, UI wiring, actions, logos, counter, entry point
 tests/                node:test suites, no other dependency
+tools/smoke.js        drives the page in headless Chromium over the DevTools protocol
+tools/check-live.js   checks a deployed copy's headers and files
 tools/make-icons.js   regenerates the PNG icons
+deploy/               nginx config and the deploy notes
 docs/                 the design brainstorm this was built to
 ```
 
 The built-in logo icons are Material Design icons (Apache 2.0). The Brewster Technical fonts
 are the site owner's own, under the SIL Open Font License.
 
-Dependencies point one way: `app` uses `payload`, `render` and `io`; those use `qr`; `qr`
+Dependencies point one way: `app` uses `payload`, `render` and `io`; `render` uses `qr`; `qr`
 imports nothing outside its folder and never touches the DOM.
 
 `encode(text, options)` returns the module grid with a role for every module (finder, timing,

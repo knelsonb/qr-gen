@@ -57,15 +57,22 @@ export function describe(state) {
 }
 
 // The printed width of one module, when a physical size is set.
+export const MM_PER_INCH = 25.4;
+
+export function widthMm(state) {
+  return state.style.unit === 'in' ? state.style.physical * MM_PER_INCH : state.style.physical;
+}
+
 export function moduleMm(state, code) {
-  if (!code || state.style.unit === 'px')
-    return null;
-  const width = state.style.unit === 'in' ? state.style.physical * 25.4 : state.style.physical;
-  return width / (code.size + 2 * state.style.quiet);
+  return code ? widthMm(state) / (code.size + 2 * state.style.quiet) : null;
 }
 
 export function effectiveLevel(state) {
   return state.logo ? 'H' : state.style.ecLevel;
+}
+
+export function encodeOptions(state) {
+  return { ecLevel: effectiveLevel(state), boostEc: state.style.boost, eci: state.style.eci };
 }
 
 function showPayload(state, payload) {
@@ -201,7 +208,7 @@ export function render(state) {
   let code = null;
   if (payload !== '' && !blocked) {
     try {
-      code = encode(payload, { ecLevel: effectiveLevel(state), boostEc: state.style.boost, eci: state.style.eci });
+      code = encode(payload, encodeOptions(state));
     } catch (err) {
       error.textContent = err instanceof CapacityError ? tooLong(state, err) : 'This text cannot be encoded.';
     }
@@ -277,17 +284,14 @@ function stamp(reason) {
   }, 1800);
 }
 
+// Keystrokes within one frame become one render; the latest reason is the one stamped.
 let pending = null;
-export function scheduleRender(state, reason = null) {
-  if (reason)
-    pending = reason;
-  if (pending === null)
-    pending = '';
-  else if (pending !== reason && reason)
-    pending = reason;
+export function scheduleRender(state, reason = '') {
+  const queued = pending !== null;
+  pending = reason || pending || '';
+  if (queued)
+    return;
   requestAnimationFrame(() => {
-    if (pending === null)
-      return;
     const why = pending;
     pending = null;
     render(state);
@@ -415,7 +419,7 @@ export function bind(state) {
     const name = input.dataset.field;
     const kind = FIELDS[type][name];
     input.addEventListener('input', () => {
-      state.fields[type][name] = input.type === 'checkbox' ? input.checked : coerce(kind, input.value) ?? state.fields[type][name];
+      state.fields[type][name] = input.type === 'checkbox' ? input.checked : (coerce(kind, input.value) ?? state.fields[type][name]);
       if (kind === 'string' && input.value.length > MAX_TEXT)
         input.value = state.fields[type][name];
       if (type === 'crypto')

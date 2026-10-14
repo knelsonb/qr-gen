@@ -3,10 +3,10 @@ import { bind, bindLogo, sync, render, offerLinkContent } from './ui.js';
 import { bindActions } from './actions.js';
 import { showCount } from './counter.js';
 
+// Read by the tests, which check it against the service worker's copy.
 export const VERSION = '1.1.0';
 
 const state = defaultState();
-state.logo = null;
 
 try {
   styleFromJson(state, localStorage.getItem('qr-settings') ?? '');
@@ -14,7 +14,8 @@ try {
   // Storage may be unavailable; the defaults will do.
 }
 
-// A settings link opened while the page is already up changes only the fragment.
+// Reads the settings link at load, and again when one is opened on the live page, which only
+// changes the fragment.
 function readFragment() {
   const params = parseFragment(location.hash);
   if (!params)

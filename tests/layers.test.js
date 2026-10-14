@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { encode, CapacityError } from '../site/js/qr/encode.js';
 import { toSvg, modulePath, escapeXml } from '../site/js/render/svg.js';
 import { toText } from '../site/js/render/text.js';
-import { build, wifi, vcard, mecard, event, email, sms, url } from '../site/js/payload/builders.js';
+import { build, wifi, vcard, mecard, calendarEvent as event, email, sms, url } from '../site/js/payload/builders.js';
 import { inspect, inspectUrl, revealControls } from '../site/js/payload/inspect.js';
 import { crc32 } from '../site/js/io/crc32.js';
 import { makeZip } from '../site/js/io/zip.js';
@@ -83,7 +83,7 @@ test('SVG is well formed, escapes the title and matches the module count', () =>
   assert.ok(circles > 0 && circles < dark);
 });
 
-test('SVG decodes with zbar', { skip: !has('zbarimg') && 'zbarimg is not installed' }, () => {
+test('SVG decodes with zbar', { skip: !has('zbarimg') && 'zbarimg is not installed' }, t => {
   const dir = mkdtempSync(join(tmpdir(), 'qr-svg-'));
   for (const rounded of [false, true]) {
     const file = join(dir, `code-${rounded}.svg`);
@@ -92,7 +92,8 @@ test('SVG decodes with zbar', { skip: !has('zbarimg') && 'zbarimg is not install
     try {
       decoded = execFileSync('zbarimg', ['-q', '--raw', file]).toString().trim();
     } catch {
-      return; // zbar's image library cannot rasterise SVG here
+      t.skip('zbar cannot rasterise SVG on this machine');
+      return;
     }
     assert.equal(decoded, 'https://example.com/svg-check');
   }
@@ -181,7 +182,7 @@ test('hostile fragments are clamped or ignored', () => {
   assert.equal(styleFromJson(defaultState(), styleToJson(defaultState())).style.size, 1024);
 });
 
-test('review fixes: schemes, dates, amounts, coordinates, slugs, stored style', () => {
+test('schemes, dates, amounts, coordinates, slugs and stored style', () => {
   assert.equal(url({ url: 'example.com:8443/x' }), 'https://example.com:8443/x');
   assert.equal(url({ url: 'localhost:3000' }), 'https://localhost:3000');
   assert.equal(url({ url: 'mailto:a@b.co' }), 'mailto:a@b.co');
@@ -225,8 +226,8 @@ test('scannability rates contrast, border, print size and logo', () => {
   assert.equal(assess(code, { ...style, dark: '#ffffff', light: '#000000', invertedOk: true }).overall, 'good');
   assert.equal(assess(code, { ...style, dark: '#888888' }).overall, 'risky');
   assert.equal(assess(code, style, { moduleMm: 0.2 }).overall, 'poor');
-  assert.equal(assess(code, style, { logo: true }).overall, 'poor');
-  assert.equal(assess(encode('x', { ecLevel: 'H' }), style, { logo: true }).overall, 'good');
+  assert.equal(assess(code, style, { logo: 7 }).overall, 'poor');
+  assert.equal(assess(encode('x', { ecLevel: 'H' }), style, { logo: 5 }).overall, 'good');
   assert.ok(Math.abs(contrastRatio('#000000', '#ffffff') - 21) < 0.01);
 });
 

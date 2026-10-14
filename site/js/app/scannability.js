@@ -52,14 +52,16 @@ export function assess(code, style, { logo = null, moduleMm = null } = {}) {
   }
 
   if (logo !== null) {
+    // High correction repairs up to 30% of the codewords; the pad's share of the area is a
+    // fair proxy, with room left for print damage.
     const covered = (logo / code.size) ** 2;
     if (style.logoShape === 'none')
       factors.push({ name: 'Logo pad', rating: 'risky', text: 'none, so the squares show through the logo and readers must tell the two apart.' });
     if (code.ecLevel !== 'H')
       factors.push({ name: 'Logo', rating: 'poor', text: 'needs High error correction to cover what it hides.' });
-    else if (covered <= 0.05)
+    else if (covered <= 0.07)
       factors.push({ name: 'Logo', rating: 'good', text: `covers ${Math.round(covered * 100)}% of the code, well inside what High correction repairs.` });
-    else if (covered <= 0.09)
+    else if (covered <= 0.12)
       factors.push({ name: 'Logo', rating: 'risky', text: `covers ${Math.round(covered * 100)}% of the code. Test with a phone before printing.` });
     else
       factors.push({ name: 'Logo', rating: 'poor', text: `covers ${Math.round(covered * 100)}% of the code, more than error correction can make up.` });

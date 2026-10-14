@@ -238,7 +238,7 @@ await waitForDownloads(4);
 await setInput('batch-text', 'javascript:alert(1)\nhttps://example.com/ok');
 await click('#batch-svg');
 await waitForDownloads(5);
-assert.match(await text('batch-status'), /Done: 1 codes\. Lines 1/);
+assert.match(await text('batch-status'), /Done: 1 code\. Lines 1/);
 
 // No network requests after load except the page's own files.
 const requests = await run("performance.getEntriesByType('resource').map(e => new URL(e.name).origin).filter(o => o !== location.origin)");

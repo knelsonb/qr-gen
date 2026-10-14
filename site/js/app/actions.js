@@ -8,11 +8,10 @@ import { toText } from '../render/text.js';
 import { withDpi } from '../io/png.js';
 import { makeZip } from '../io/zip.js';
 import { download, slug } from '../io/download.js';
-import { serialize, defaultState, MAX_TEXT, MAX_FRAGMENT } from './state.js';
+import { serialize, defaultState, coerce, STYLE, MAX_TEXT, MAX_FRAGMENT } from './state.js';
 import { inspectUrl } from '../payload/inspect.js';
-import { current, describe, render, sync, effectiveLevel, saveStyle } from './ui.js';
+import { current, describe, render, sync, encodeOptions, saveStyle, widthMm } from './ui.js';
 import { bumpCount, resetCount } from './counter.js';
-import { coerce, STYLE } from './state.js';
 
 const $ = id => document.getElementById(id);
 const MAX_BATCH = 200;
@@ -39,12 +38,6 @@ function styleOptions(state) {
   };
 }
 
-function widthMm(state) {
-  if (state.style.unit === 'mm') return state.style.physical;
-  if (state.style.unit === 'in') return state.style.physical * 25.4;
-  return null;
-}
-
 // A PNG of the code at a whole number of pixels per module, no larger than `pixels` across.
 async function pngBlob(state, code, pixels) {
   const canvas = document.createElement('canvas');
@@ -55,10 +48,7 @@ async function pngBlob(state, code, pixels) {
     logo: state.logo ? { image: state.logo.image, fraction: state.style.logoFraction, shape: state.style.logoShape } : null,
   });
   const blob = await toPngBlob(canvas);
-  const mm = widthMm(state);
-  if (mm === null)
-    return blob;
-  const dpi = drawn / (mm / 25.4);
+  const dpi = drawn / (widthMm(state) / 25.4);
   return new Blob([withDpi(await blob.arrayBuffer(), dpi)], { type: 'image/png' });
 }
 
@@ -172,9 +162,8 @@ function print(state) {
   const { code, type } = current();
   if (!code)
     return;
+  clearPrintArea();
   const area = $('print-area');
-  while (area.firstChild)
-    area.removeChild(area.firstChild);
   // The same SVG the download makes, parsed as a document; it holds only numbers, checked
   // colours, an escaped title and the page's own data URL.
   const parsed = new DOMParser().parseFromString(svgText(state, code), 'image/svg+xml');
@@ -183,7 +172,7 @@ function print(state) {
     return;
   }
   const svg = document.importNode(parsed.documentElement, true);
-  const size = `${widthMm(state) ?? 50}mm`;
+  const size = `${widthMm(state)}mm`;
   svg.setAttribute('width', size);
   svg.setAttribute('height', size);
   area.append(svg);
@@ -245,19 +234,21 @@ async function batch(state, format) {
     download(makeZip(files), 'qr-codes.zip');
     bumpCount(files.length);
   }
-  status('batch-status', skipped.length ? `Done: ${files.length} codes. Lines ${skipped.join(', ')} were too long or were script links, and were skipped.` : `Done: ${files.length} codes.`);
+  const made = `${files.length} ${files.length === 1 ? 'code' : 'codes'}`;
+  status('batch-status', skipped.length ? `Done: ${made}. Lines ${skipped.join(', ')} were too long or were script links, and were skipped.` : `Done: ${made}.`);
 }
 
 async function makeBatch(state, format, lines, files, skipped, used) {
   for (let i = 0; i < lines.length; i++) {
     $('batch-status').textContent = `Making ${i + 1} of ${lines.length}…`;
+    // A short yield every few codes keeps the progress text painting.
     if (i % 8 === 0)
       await new Promise(resolve => setTimeout(resolve, 0));
     let code;
     try {
       if (lines[i].length > MAX_TEXT || inspectUrl(lines[i]).some(f => f.level === 'block'))
         throw new RangeError('refused');
-      code = encode(lines[i], { ecLevel: effectiveLevel(state), boostEc: state.style.boost, eci: state.style.eci });
+      code = encode(lines[i], encodeOptions(state));
     } catch {
       skipped.push(i + 1);
       continue;
@@ -267,7 +258,7 @@ async function makeBatch(state, format, lines, files, skipped, used) {
       name += '-';
     used.add(name);
     if (format === 'svg') {
-      files.push({ name: `${name}.svg`, data: new TextEncoder().encode(toSvg(code, { ...styleOptions(state), pixelsPerModule: 10, widthMm: widthMm(state) })) });
+      files.push({ name: `${name}.svg`, data: new TextEncoder().encode(svgText(state, code)) });
     } else {
       const blob = await pngBlob(state, code, 512);
       files.push({ name: `${name}.png`, data: new Uint8Array(await blob.arrayBuffer()) });

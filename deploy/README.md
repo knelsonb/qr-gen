@@ -18,8 +18,8 @@ Static files on Cloudflare's edge, no server to keep up, `_headers` honoured, de
 
 ## Route B: pve LXC behind a Cloudflare Tunnel (what runs now)
 
-CT 120 `qr` on pve: Debian 13, unprivileged, 1 core, 256 MB, 2 GB, DHCP on vmbr0, starts
-with the host. Inside it nginx serves `/srv/qr/site` through `deploy/nginx-qr.conf`, and
+CT 120 `qr` on pve: Debian 13, unprivileged, 1 core, 256 MB of RAM, a 2 GB disk, DHCP on
+vmbr0, starts with the host. Inside it nginx serves `/srv/qr/site` through `deploy/nginx-qr.conf`, and
 cloudflared runs a locally managed tunnel named `qr-pve` as a systemd service.
 
 - Tunnel config: `/etc/cloudflared/config.yml` (one ingress rule, `qr.thetallkeith.com` to
@@ -50,4 +50,4 @@ and `0 issue "digicert.com"` (Cloudflare issues through those) if the zone has n
 ## After going live
 
 `node tools/check-live.js https://qr.thetallkeith.com` fetches the site and asserts the headers
-and that every file the service worker lists is served.
+and that every file the service worker lists, plus security.txt and the manifest, is served.

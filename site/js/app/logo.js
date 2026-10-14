@@ -1,14 +1,13 @@
-// Logos for the middle of a code: a file the visitor chose, a built-in icon, or a few letters.
-// Each becomes a small canvas plus a data URL for the SVG export. Files are handled with care:
-// type by content, size and dimensions capped before decoding, and the pixels redrawn so the
-// file's metadata never reaches an export.
+// Logos for the middle of a code: a file the visitor chose, a built-in icon, or a few letters,
+// each as a small canvas plus a data URL for the SVG export. Files are typed by content, capped
+// before decoding, and redrawn so their metadata never reaches an export.
 
 import { ICONS } from './icons.js';
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_SIDE = 4096;
 const LOGO_PIXELS = 512;
-const MAX_TEXT = 12;
+const MAX_LOGO_LETTERS = 12;
 
 function readDimensions(bytes) {
   if (bytes.length < 32)
@@ -46,7 +45,7 @@ function readDimensions(bytes) {
 }
 
 function looksLikeSvg(bytes) {
-  const head = new TextDecoder().decode(bytes.subarray(0, 2048)).replace(/^﻿/, '').trimStart();
+  const head = new TextDecoder().decode(bytes.subarray(0, 2048)).replace(/^\ufeff/, '').trimStart();
   return head.startsWith('<') && /<svg[\s>]/i.test(head);
 }
 
@@ -133,7 +132,7 @@ export function logoFromIcon(name, colour) {
 const FONT = "'Brewster Technical', system-ui, sans-serif";
 
 export async function logoFromText(text, colour) {
-  const letters = Array.from(text.trim()).slice(0, MAX_TEXT).join('');
+  const letters = Array.from(text.trim()).slice(0, MAX_LOGO_LETTERS).join('');
   if (letters === '')
     throw new Error('Type a few letters first.');
   try {

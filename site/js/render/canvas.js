@@ -1,13 +1,7 @@
 // A code drawn onto a canvas at a whole number of pixels per module, so edges stay crisp.
 
-import { ROLE } from '../qr/encode.js';
 import { checkColour } from './svg.js';
-import { logoBox, drawPad, drawImageInBox } from './logo.js';
-
-function isSquare(code, x, y) {
-  const role = code.roles[y * code.size + x];
-  return role === ROLE.finder || role === ROLE.alignment;
-}
+import { logoBox, drawPad, drawImageInBox, isSquareModule } from './logo.js';
 
 // Returns the pixel size drawn. `logo` is { image, fraction, shape }; the image is anything
 // drawImage accepts.
@@ -21,6 +15,7 @@ export function drawCode(canvas, code, options = {}) {
   ctx.fillStyle = checkColour(options.light ?? '#ffffff');
   ctx.fillRect(0, 0, total, total);
   ctx.fillStyle = checkColour(options.dark ?? '#000000');
+  // Below three pixels a module a circle is just a blurred square.
   const rounded = options.rounded === true && scale >= 3;
   for (let y = 0; y < code.size; y++) {
     for (let x = 0; x < code.size; x++) {
@@ -28,7 +23,7 @@ export function drawCode(canvas, code, options = {}) {
         continue;
       const px = (x + quiet) * scale;
       const py = (y + quiet) * scale;
-      if (rounded && !isSquare(code, x, y)) {
+      if (rounded && !isSquareModule(code, x, y)) {
         ctx.beginPath();
         ctx.arc(px + scale / 2, py + scale / 2, scale / 2, 0, Math.PI * 2);
         ctx.fill();

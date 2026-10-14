@@ -2,6 +2,8 @@
 // fragment and local storage. Everything that arrives from either is checked against the
 // schema; unknown keys are dropped and values clamped.
 
+import { SHAPES } from '../render/logo.js';
+
 export const TYPES = ['url', 'text', 'wifi', 'contact', 'email', 'sms', 'phone', 'event', 'geo', 'crypto'];
 
 const S = 'string';
@@ -34,12 +36,13 @@ export const STYLE = {
   physical: { number: [5, 2000] },
   caption: S,
   logoFraction: { number: [0.1, 0.3] },
-  logoShape: ['square', 'rounded', 'circle', 'none'],
+  logoShape: SHAPES,
   invertedOk: B,
   eci: B,
   boost: B,
 };
 
+// 4500 covers the longest payload a version 40 code holds; 8000 leaves room for its encoding.
 export const MAX_TEXT = 4500;
 export const MAX_FRAGMENT = 8000;
 
@@ -50,10 +53,10 @@ export function defaultState() {
     for (const [name, kind] of Object.entries(FIELDS[type]))
       fields[type][name] = kind === B ? false : Array.isArray(kind) ? kind[0] : '';
   }
-  fields.wifi.security = 'WPA';
   return {
     type: 'url',
     fields,
+    logo: null,
     style: {
       ecLevel: 'M', quiet: 4, dark: '#000000', light: '#ffffff', rounded: false,
       size: 1024, unit: 'mm', physical: 50, caption: '', logoFraction: 0.2, logoShape: 'square',

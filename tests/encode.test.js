@@ -134,7 +134,7 @@ const SAMPLES = [
   ['numeric', '01234567', {}],
   ['alphanumeric', 'HELLO WORLD', {}],
   ['url', 'https://qr.thetallkeith.com/?ref=flyer-2026', {}],
-  ['wifi', 'WIFI:T:WPA;S:Coffee House;P:p@ss\;word;H:true;;', { ecLevel: 'H' }],
+  ['wifi', ['WIFI:T:WPA;S:Coffee House;P:p@ss', String.fromCharCode(92), ';word;H:true;;'].join(''), { ecLevel: 'H' }],
   ['utf8', 'Grüße aus Köln ✓ – 日本語', {}],
   ['kanji', '日本語のテキスト', {}],
   ['kanji-forced', '東京', { mode: 'kanji' }],

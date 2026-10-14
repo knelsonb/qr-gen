@@ -1,8 +1,15 @@
-// Where a logo sits on a code and what backs it. The box snaps to whole modules and keeps the
-// code's parity so it centres on the grid; the pad behind it is one of four shapes. Shared by
-// the canvas and SVG renderers so both draw the same thing.
+// Where a logo sits on a code and what backs it, shared by the canvas and SVG renderers so both
+// draw the same thing.
+
+import { ROLE } from '../qr/encode.js';
 
 export const SHAPES = ['square', 'rounded', 'circle', 'none'];
+
+// Finder and alignment patterns stay square under rounded styling so readers still find them.
+export function isSquareModule(code, x, y) {
+  const role = code.roles[y * code.size + x];
+  return role === ROLE.finder || role === ROLE.alignment;
+}
 
 // Inset of the image inside its box, as a share of the box side.
 const INSET = 0.12;
@@ -71,7 +78,7 @@ function roundedRect(ctx, x, y, side, r) {
   ctx.closePath();
 }
 
-// Fits an image inside the box, centred, and returns the pixel rect it was drawn in.
+// Fits an image inside the box, centred.
 export function drawImageInBox(ctx, image, box, scale) {
   const rect = imageRect(box);
   const fit = Math.min(rect.size * scale / image.width, rect.size * scale / image.height);
@@ -80,5 +87,4 @@ export function drawImageInBox(ctx, image, box, scale) {
   const x = rect.x * scale + (rect.size * scale - w) / 2;
   const y = rect.y * scale + (rect.size * scale - h) / 2;
   ctx.drawImage(image, x, y, w, h);
-  return { x, y, w, h };
 }

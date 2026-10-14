@@ -1,8 +1,7 @@
 // A code as an SVG document: one path for every dark module, so the file stays one node even
 // at version 40. User text never enters the markup; only numbers and checked colours do.
 
-import { ROLE } from '../qr/encode.js';
-import { logoBox, padPath, imageRect } from './logo.js';
+import { logoBox, padPath, imageRect, isSquareModule } from './logo.js';
 
 export function checkColour(colour) {
   if (!/^#[0-9a-f]{6}$/i.test(colour))
@@ -21,27 +20,21 @@ export function escapeXml(text) {
     .replace(/'/g, '&#39;');
 }
 
-function isSquare(code, x, y) {
-  const role = code.roles[y * code.size + x];
-  return role === ROLE.finder || role === ROLE.alignment;
-}
-
-// Dark modules as horizontal runs; rounded data modules as circles. Finders and alignment
-// patterns stay square so readers still find them.
+// Dark modules as horizontal runs; rounded data modules as circles.
 export function modulePath(code, quiet, rounded) {
   const parts = [];
   for (let y = 0; y < code.size; y++) {
     for (let x = 0; x < code.size; x++) {
       if (!code.get(x, y))
         continue;
-      if (rounded && !isSquare(code, x, y)) {
+      if (rounded && !isSquareModule(code, x, y)) {
         const cx = x + quiet + 0.5;
         const cy = y + quiet + 0.5;
         parts.push(`M${cx - 0.5} ${cy}a.5 .5 0 1 0 1 0a.5 .5 0 1 0-1 0z`);
         continue;
       }
       let run = 1;
-      while (x + run < code.size && code.get(x + run, y) && !(rounded && !isSquare(code, x + run, y)))
+      while (x + run < code.size && code.get(x + run, y) && !(rounded && !isSquareModule(code, x + run, y)))
         run++;
       parts.push(`M${x + quiet} ${y + quiet}h${run}v1h-${run}z`);
       x += run - 1;
@@ -64,9 +57,9 @@ export function toSvg(code, options = {}) {
     const box = logoBox(code, quiet, options.logo.fraction);
     const pad = padPath(box, options.logo.shape ?? 'square');
     const rect = imageRect(box);
-    const n = v => Math.round(v * 1000) / 1000;
+    const round3 = v => Math.round(v * 1000) / 1000;
     logo = (pad ? `<path d="${pad}" fill="${light}"/>` : '')
-      + `<image href="${options.logo.dataUrl}" x="${n(rect.x)}" y="${n(rect.y)}" width="${n(rect.size)}" height="${n(rect.size)}" preserveAspectRatio="xMidYMid meet"/>`;
+      + `<image href="${options.logo.dataUrl}" x="${round3(rect.x)}" y="${round3(rect.y)}" width="${round3(rect.size)}" height="${round3(rect.size)}" preserveAspectRatio="xMidYMid meet"/>`;
   }
   return `<?xml version="1.0" encoding="UTF-8"?>\n`
     + `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${total} ${total}" width="${dimension}" height="${dimension}" shape-rendering="crispEdges">`
