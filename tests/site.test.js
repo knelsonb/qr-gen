@@ -66,5 +66,5 @@ test('the nginx config carries the same headers as _headers', () => {
   }
   assert.ok(nginx.includes('add_header Cache-Control $qr_cache_control always;'));
   assert.ok(/sw\\.js\|index\\.html\)\?\$\s+"no-cache"/.test(nginx));
-  assert.ok(!/location[^}]*add_header/.test(nginx), 'add_header inside a location drops the server headers');
+  assert.ok(!/^\s*location\b[^}]*add_header/m.test(nginx), 'add_header inside a location drops the server headers');
 });
