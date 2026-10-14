@@ -342,16 +342,16 @@ export function bind(state) {
 export function offerLinkContent(state, params) {
   const banner = $('link-banner');
   banner.hidden = false;
-  $('load-link').addEventListener('click', () => {
+  $('load-link').onclick = () => {
     applySettings(state, key => params.get(key), { content: true });
     banner.hidden = true;
     sync(state);
     render(state);
-  });
-  $('ignore-link').addEventListener('click', () => {
+  };
+  $('ignore-link').onclick = () => {
     banner.hidden = true;
     history.replaceState(null, '', location.pathname);
-  });
+  };
 }
 
 export { TYPES };

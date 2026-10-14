@@ -32,6 +32,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 body {
   margin: 0;
@@ -93,6 +94,15 @@ h1 { margin: 0; font-size: 1.6rem; }
   .layout { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; }
   .output { position: sticky; top: 1rem; }
 }
+/* On a phone the two sections dissolve into one column, ordered: type, preview, form, actions. */
+@media (max-width: 55.99rem) {
+  .inputs, .output { display: contents; }
+  .types, #switch-hint { order: 1; }
+  .preview, #stats, #error { order: 2; }
+  #form, .inputs > details { order: 3; }
+  .actions, .meter, .contains, .share-link { order: 4; }
+  .layout { gap: .75rem; }
+}
 
 fieldset { border: 0; padding: 0; margin: 0 0 1rem; min-width: 0; }
 legend { font-weight: 600; margin-bottom: .35rem; }
@@ -140,6 +150,7 @@ input[type="number"] { width: 7rem; }
 
 .row { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
 .row > label { margin: 0; }
+.row > select, .row > input[type="number"] { width: auto; flex: 0 1 auto; }
 .row input[type="password"] { flex: 1; }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0 1rem; }
 

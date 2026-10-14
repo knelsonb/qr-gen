@@ -14,9 +14,14 @@ try {
   // Storage may be unavailable; the defaults will do.
 }
 
-const params = parseFragment(location.hash);
-if (params) {
+// A settings link opened while the page is already up changes only the fragment.
+function readFragment() {
+  const params = parseFragment(location.hash);
+  if (!params)
+    return;
   applySettings(state, key => params.get(key));
+  sync(state);
+  render(state);
   if (hasContent(params))
     offerLinkContent(state, params);
 }
@@ -25,6 +30,8 @@ bind(state);
 bindActions(state);
 sync(state);
 render(state);
+readFragment();
+window.addEventListener('hashchange', readFragment);
 
 const logoInput = document.getElementById('logo-file');
 logoInput.addEventListener('change', async () => {
