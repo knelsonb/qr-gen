@@ -20,6 +20,9 @@ tools/make-icons.js   regenerates the PNG icons
 docs/                 the design brainstorm this was built to
 ```
 
+The built-in logo icons are Material Design icons (Apache 2.0). The Brewster Technical fonts
+are the site owner's own, under the SIL Open Font License.
+
 Dependencies point one way: `app` uses `payload`, `render` and `io`; those use `qr`; `qr`
 imports nothing outside its folder and never touches the DOM.
 

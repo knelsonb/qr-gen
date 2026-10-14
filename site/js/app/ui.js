@@ -1,12 +1,14 @@
 // Wires the form to the state and renders the state into the page. The DOM is a view of the
 // state and never the store. User text reaches the page only through textContent.
 
-import { encode, CapacityError, capacityBits } from '../qr/encode.js';
+import { encode, CapacityError, capacityBits, dataCodewords, EC_LEVELS } from '../qr/encode.js';
 import { drawCode } from '../render/canvas.js';
 import { build } from '../payload/builders.js';
 import { inspect, revealControls } from '../payload/inspect.js';
 import { STYLE, FIELDS, MAX_TEXT, coerce, applySettings, styleToJson } from './state.js';
 import { assess } from './scannability.js';
+import { logoBox } from '../render/logo.js';
+import { logoFromFile, logoFromIcon, logoFromText, recolourLogo, describeLogo } from './logo.js';
 
 const $ = id => document.getElementById(id);
 
@@ -98,10 +100,24 @@ function showPayload(state, payload) {
   pre.append(mark, shown.slice(at + host.length));
 }
 
+// The smallest version whose data area holds `bits` at a level, or null past version 40.
+function smallestVersion(bits, level) {
+  for (let v = 1; v <= 40; v++)
+    if (dataCodewords(v, level) * 8 >= bits)
+      return v;
+  return null;
+}
+
 function showStats(state, code) {
   const used = Math.ceil(code.dataBits / 8);
   const room = code.capacityBits / 8;
-  $('stats').textContent = `Version ${code.version} · ${code.size}×${code.size} modules · ${used} of ${room} bytes · ${LEVEL_NAMES[code.ecLevel]} correction`;
+  const forced = state.logo && state.style.ecLevel !== 'H' ? ', forced by the logo' : '';
+  $('stats').textContent = `Version ${code.version} · ${code.size}×${code.size} modules · ${used} of ${room} bytes · ${LEVEL_NAMES[code.ecLevel]} correction${forced}`;
+  const byLevel = EC_LEVELS.map(level => {
+    const v = smallestVersion(code.dataBits, level);
+    return `${level} ${v === null ? 'too long' : `${v * 4 + 17}×${v * 4 + 17}`}`;
+  });
+  $('size-why').textContent = `Size comes from content length and correction level, in steps of 4 modules a side. This content at each level: ${byLevel.join(' · ')}.`;
 }
 
 function capacityWarning(state, code, findings) {
@@ -122,7 +138,8 @@ function tooLong(state, err) {
 }
 
 function showScannability(state, code) {
-  const result = assess(code, state.style, { logo: Boolean(state.logo), moduleMm: moduleMm(state, code) });
+  const logo = state.logo ? logoBox(code, 0, state.style.logoFraction).side : null;
+  const result = assess(code, state.style, { logo, moduleMm: moduleMm(state, code) });
   const overall = $('scan-overall');
   overall.textContent = { good: 'Good', risky: 'Risky', poor: 'Poor' }[result.overall];
   overall.className = `rating ${result.overall}`;
@@ -189,6 +206,7 @@ export function render(state) {
   preview.hidden = code === null;
   $('empty').hidden = code !== null;
   $('caption-out').textContent = code ? state.style.caption : '';
+  state.logo = recolourLogo(state.logo, state.style.dark);
   if (code) {
     const total = code.size + 2 * state.style.quiet;
     drawCode(preview, code, {
@@ -197,7 +215,7 @@ export function render(state) {
       dark: state.style.dark,
       light: state.style.light,
       rounded: state.style.rounded,
-      logo: state.logo ? { image: state.logo.image, fraction: state.style.logoFraction } : null,
+      logo: state.logo ? { image: state.logo.image, fraction: state.style.logoFraction, shape: state.style.logoShape } : null,
     });
     preview.setAttribute('aria-label', `QR code: ${describe(state)}`);
     showStats(state, code);
@@ -206,6 +224,7 @@ export function render(state) {
     selfCheck(payload);
   } else {
     $('stats').textContent = '';
+    $('size-why').textContent = '';
     $('scan-overall').textContent = '';
     $('scan-overall').className = 'rating';
     clear($('scan-factors'));
@@ -221,14 +240,39 @@ export function render(state) {
   $('announce').textContent = code ? 'Code updated' : '';
 }
 
-let pending = false;
-export function scheduleRender(state) {
-  if (pending)
-    return;
-  pending = true;
+// What a control changes, as the word stamped on the code pane after each update.
+const CHANGE_LABELS = {
+  quiet: 'border', dark: 'colours', light: 'colours', ecLevel: 'correction', boost: 'correction',
+  rounded: 'module shape', logoFraction: 'logo size', logoShape: 'logo pad', caption: 'caption',
+  physical: 'print size', unit: 'print size', invertedOk: 'contrast', eci: 'encoding',
+};
+
+let stampTimer = 0;
+function stamp(reason) {
+  const el = $('code-stamp');
+  el.textContent = `02 · UPDATED: ${reason.toUpperCase()}`;
+  clearTimeout(stampTimer);
+  stampTimer = setTimeout(() => {
+    el.textContent = '02';
+  }, 1800);
+}
+
+let pending = null;
+export function scheduleRender(state, reason = null) {
+  if (reason)
+    pending = reason;
+  if (pending === null)
+    pending = '';
+  else if (pending !== reason && reason)
+    pending = reason;
   requestAnimationFrame(() => {
-    pending = false;
+    if (pending === null)
+      return;
+    const why = pending;
+    pending = null;
     render(state);
+    if (why)
+      stamp(why);
   });
 }
 
@@ -306,6 +350,7 @@ export function bind(state) {
       showType(state);
       $('switch-hint').hidden = true;
       render(state);
+      stamp('type');
       const first = document.querySelector(`fieldset[data-type="${state.type}"] input, fieldset[data-type="${state.type}"] textarea`);
       if (first)
         first.focus();
@@ -321,7 +366,7 @@ export function bind(state) {
         input.value = state.fields[type][name];
       if (type === 'crypto')
         echoAddress(state);
-      scheduleRender(state);
+      scheduleRender(state, 'content');
     });
     if (type === 'url' || type === 'text')
       input.addEventListener('paste', e => offerSwitch(state, e.clipboardData.getData('text')));
@@ -338,7 +383,7 @@ export function bind(state) {
         $('quiet-out').textContent = value;
       if (name === 'logoFraction')
         $('logo-out').textContent = Math.round(value * 100);
-      scheduleRender(state);
+      scheduleRender(state, CHANGE_LABELS[name] ?? name);
     });
   }
   $('show-password').addEventListener('click', () => {
@@ -348,6 +393,44 @@ export function bind(state) {
     $('show-password').textContent = show ? 'Hide' : 'Show';
     $('show-password').setAttribute('aria-pressed', String(show));
   });
+}
+
+function setLogo(state, logo) {
+  state.logo = logo;
+  $('logo-current').textContent = describeLogo(logo);
+  $('logo-clear').hidden = logo === null;
+  $('logo-error').textContent = '';
+  if (logo === null || logo.kind !== 'file')
+    $('logo-file').value = '';
+  render(state);
+  stamp('logo');
+}
+
+async function tryLogo(state, make) {
+  try {
+    setLogo(state, await make());
+  } catch (err) {
+    setLogo(state, null);
+    $('logo-error').textContent = err.message;
+  }
+}
+
+export function bindLogo(state) {
+  $('logo-file').addEventListener('change', () => {
+    const file = $('logo-file').files[0];
+    if (file)
+      tryLogo(state, () => logoFromFile(file));
+  });
+  for (const button of document.querySelectorAll('[data-icon]'))
+    button.addEventListener('click', () => tryLogo(state, () => logoFromIcon(button.dataset.icon, state.style.dark)));
+  $('logo-text-use').addEventListener('click', () => tryLogo(state, () => logoFromText($('logo-text').value, state.style.dark)));
+  $('logo-text').addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      $('logo-text-use').click();
+    }
+  });
+  $('logo-clear').addEventListener('click', () => setLogo(state, null));
 }
 
 // A link with content in it pre-fills nothing until the visitor asks.

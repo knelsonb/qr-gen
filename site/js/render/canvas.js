@@ -2,13 +2,15 @@
 
 import { ROLE } from '../qr/encode.js';
 import { checkColour } from './svg.js';
+import { logoBox, drawPad, drawImageInBox } from './logo.js';
 
 function isSquare(code, x, y) {
   const role = code.roles[y * code.size + x];
   return role === ROLE.finder || role === ROLE.alignment;
 }
 
-// Returns the pixel size drawn. `logo.image` is anything drawImage accepts.
+// Returns the pixel size drawn. `logo` is { image, fraction, shape }; the image is anything
+// drawImage accepts.
 export function drawCode(canvas, code, options = {}) {
   const quiet = options.quiet ?? 4;
   const scale = Math.max(1, Math.floor(options.pixelsPerModule ?? 8));
@@ -36,15 +38,9 @@ export function drawCode(canvas, code, options = {}) {
     }
   }
   if (options.logo) {
-    const side = Math.round(code.size * scale * options.logo.fraction);
-    const at = Math.round((total - side) / 2);
-    ctx.fillStyle = checkColour(options.light ?? '#ffffff');
-    ctx.fillRect(at, at, side, side);
-    const image = options.logo.image;
-    const fit = Math.min(side / image.width, side / image.height);
-    const w = Math.round(image.width * fit);
-    const h = Math.round(image.height * fit);
-    ctx.drawImage(image, at + Math.round((side - w) / 2), at + Math.round((side - h) / 2), w, h);
+    const box = logoBox(code, quiet, options.logo.fraction);
+    drawPad(ctx, box, options.logo.shape ?? 'square', scale, checkColour(options.light ?? '#ffffff'));
+    drawImageInBox(ctx, options.logo.image, box, scale);
   }
   return total;
 }

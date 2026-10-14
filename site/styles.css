@@ -198,6 +198,11 @@ input[type="file"] { display: block; width: 100%; padding: 8px 0; }
 .row > select, .row > input[type="number"] { width: auto; flex: 0 1 auto; }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0 16px; }
 .custom { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.icons { gap: 6px; }
+button.icon { padding: 8px; min-width: 44px; background: white; color: var(--blue); }
+button.icon:hover { background: var(--light); }
+button.icon svg { width: 26px; height: 26px; fill: currentColor; display: block; }
+#logo-text { width: 10rem; }
 .custom input { width: 6.5rem; }
 .unit { font: 13px/1.5 var(--mono); color: #666; }
 

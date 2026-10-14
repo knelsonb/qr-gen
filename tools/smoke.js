@@ -147,6 +147,31 @@ assert.match(await text('error'), /Too much for one code/);
 await setInput('f-text', 'short');
 assert.equal(await text('error'), '');
 
+// Logos: an icon, then letters, with a circle pad; the PNG must still decode.
+await run("document.querySelector('#more-panel').open = true");
+await click('[data-icon="wifi"]');
+assert.equal(await run("document.getElementById('logo-clear').hidden"), false);
+assert.match(await text('logo-current'), /Wi-Fi icon/);
+assert.match(await text('scan-factors'), /Logo:/);
+assert.match(await text('stats'), /High correction/);
+await setInput('logo-text', 'MENU');
+await click('#logo-text-use');
+await new Promise(r => setTimeout(r, 300));
+assert.match(await text('logo-current'), /letters MENU/);
+await setInput('s-logoShape', 'circle');
+await click('input[name="type"][value="url"]');
+await setInput('f-url', 'https://qr.thetallkeith.com/logo');
+await click('[data-png-size="1024"]');
+await waitForDownloads(1);
+await new Promise(r => setTimeout(r, 300));
+assert.equal(execFileSync('zbarimg', ['-q', '--raw', join(downloads, 'link-to-qr-thetallkeith-com.png')]).toString().trim(), 'https://qr.thetallkeith.com/logo');
+await setInput('s-logoShape', 'none');
+assert.match(await text('scan-factors'), /Logo pad/);
+await click('#logo-clear');
+assert.equal(await run("document.getElementById('logo-clear').hidden"), true);
+await setInput('s-logoShape', 'square');
+finished.length = 0;
+
 // Downloads: PNG, SVG and a batch zip.
 await click('input[name="type"][value="url"]');
 await setInput('f-url', 'https://qr.thetallkeith.com/smoke');
@@ -158,7 +183,7 @@ await click('#batch-svg');
 await waitForDownloads(3);
 await new Promise(r => setTimeout(r, 300));
 const files = readdirSync(downloads).sort();
-assert.deepEqual(files, ['qr-codes.zip', 'smoke-test.png', 'smoke-test.svg']);
+assert.deepEqual(files, ['link-to-qr-thetallkeith-com.png', 'qr-codes.zip', 'smoke-test.png', 'smoke-test.svg']);
 assert.equal(execFileSync('zbarimg', ['-q', '--raw', join(downloads, 'smoke-test.png')]).toString().trim(), 'https://qr.thetallkeith.com/smoke');
 assert.ok(readFileSync(join(downloads, 'smoke-test.svg'), 'utf8').includes('<title>Smoke test</title>'));
 execFileSync('unzip', ['-tq', join(downloads, 'qr-codes.zip')]);

@@ -2,6 +2,7 @@
 // at version 40. User text never enters the markup; only numbers and checked colours do.
 
 import { ROLE } from '../qr/encode.js';
+import { logoBox, padPath, imageRect } from './logo.js';
 
 export function checkColour(colour) {
   if (!/^#[0-9a-f]{6}$/i.test(colour))
@@ -48,8 +49,8 @@ export function modulePath(code, quiet, rounded) {
   return parts.join('');
 }
 
-// `logo` is an optional data URL already produced by the page's own canvas, with `fraction`
-// the share of the code's width it covers.
+// `logo` is optional: { dataUrl, fraction, shape }, the data URL already produced by the page's
+// own canvas.
 export function toSvg(code, options = {}) {
   const quiet = options.quiet ?? 4;
   const dark = checkColour(options.dark ?? '#000000');
@@ -59,10 +60,12 @@ export function toSvg(code, options = {}) {
   const title = options.title ? `<title>${escapeXml(options.title)}</title>` : '';
   let logo = '';
   if (options.logo) {
-    const side = Math.round(code.size * options.logo.fraction * 100) / 100;
-    const at = Math.round((total - side) / 2 * 100) / 100;
-    logo = `<rect x="${at}" y="${at}" width="${side}" height="${side}" fill="${light}"/>`
-      + `<image href="${options.logo.dataUrl}" x="${at}" y="${at}" width="${side}" height="${side}" preserveAspectRatio="xMidYMid meet"/>`;
+    const box = logoBox(code, quiet, options.logo.fraction);
+    const pad = padPath(box, options.logo.shape ?? 'square');
+    const rect = imageRect(box);
+    const n = v => Math.round(v * 1000) / 1000;
+    logo = (pad ? `<path d="${pad}" fill="${light}"/>` : '')
+      + `<image href="${options.logo.dataUrl}" x="${n(rect.x)}" y="${n(rect.y)}" width="${n(rect.size)}" height="${n(rect.size)}" preserveAspectRatio="xMidYMid meet"/>`;
   }
   return `<?xml version="1.0" encoding="UTF-8"?>\n`
     + `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${total} ${total}" width="${dimension}" height="${dimension}" shape-rendering="crispEdges">`

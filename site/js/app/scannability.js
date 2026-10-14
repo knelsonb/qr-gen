@@ -21,9 +21,9 @@ export function isInverted(dark, light) {
 
 const RANK = { good: 0, risky: 1, poor: 2 };
 
-// `code` is the encoded result, `style` the state's style, `logo` true when one is overlaid,
-// `moduleMm` the printed module size when known.
-export function assess(code, style, { logo = false, moduleMm = null } = {}) {
+// `code` is the encoded result, `style` the state's style, `logo` the overlaid logo's box side
+// in modules (null when there is none), `moduleMm` the printed module size when known.
+export function assess(code, style, { logo = null, moduleMm = null } = {}) {
   const factors = [];
   const ratio = contrastRatio(style.dark, style.light);
   if (isInverted(style.dark, style.light) && !style.invertedOk)
@@ -51,8 +51,10 @@ export function assess(code, style, { logo = false, moduleMm = null } = {}) {
       factors.push({ name: 'Print size', rating: 'poor', text: `Modules of ${moduleMm.toFixed(2)} mm are too small to print reliably.` });
   }
 
-  if (logo) {
-    const covered = style.logoFraction * style.logoFraction;
+  if (logo !== null) {
+    const covered = (logo / code.size) ** 2;
+    if (style.logoShape === 'none')
+      factors.push({ name: 'Logo pad', rating: 'risky', text: 'With no pad the modules show through the logo, and readers must tell the two apart.' });
     if (code.ecLevel !== 'H')
       factors.push({ name: 'Logo', rating: 'poor', text: 'A logo needs High error correction to cover what it hides.' });
     else if (covered <= 0.05)

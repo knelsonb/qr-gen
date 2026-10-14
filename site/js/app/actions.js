@@ -3,7 +3,7 @@
 
 import { encode } from '../qr/encode.js';
 import { drawCode, toPngBlob } from '../render/canvas.js';
-import { toSvg, modulePath, checkColour } from '../render/svg.js';
+import { toSvg } from '../render/svg.js';
 import { toText } from '../render/text.js';
 import { withDpi } from '../io/png.js';
 import { makeZip } from '../io/zip.js';
@@ -52,7 +52,7 @@ async function pngBlob(state, code, pixels) {
   const drawn = drawCode(canvas, code, {
     ...styleOptions(state),
     pixelsPerModule: Math.max(1, Math.floor(pixels / total)),
-    logo: state.logo ? { image: state.logo.image, fraction: state.style.logoFraction } : null,
+    logo: state.logo ? { image: state.logo.image, fraction: state.style.logoFraction, shape: state.style.logoShape } : null,
   });
   const blob = await toPngBlob(canvas);
   const mm = widthMm(state);
@@ -68,7 +68,7 @@ function svgText(state, code) {
     title: state.style.caption || `QR code: ${describe(state)}`,
     widthMm: widthMm(state),
     pixelsPerModule: 10,
-    logo: state.logo ? { dataUrl: state.logo.dataUrl, fraction: state.style.logoFraction } : null,
+    logo: state.logo ? { dataUrl: state.logo.dataUrl, fraction: state.style.logoFraction, shape: state.style.logoShape } : null,
   });
 }
 
@@ -165,33 +165,13 @@ function print(state) {
   const area = $('print-area');
   while (area.firstChild)
     area.removeChild(area.firstChild);
-  const total = code.size + 2 * state.style.quiet;
-  const ns = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(ns, 'svg');
-  svg.setAttribute('viewBox', `0 0 ${total} ${total}`);
+  // The same SVG the download makes, parsed as a document; it holds only numbers, checked
+  // colours, an escaped title and the page's own data URL.
+  const parsed = new DOMParser().parseFromString(svgText(state, code), 'image/svg+xml');
+  const svg = document.importNode(parsed.documentElement, true);
   const size = `${widthMm(state) ?? 50}mm`;
   svg.setAttribute('width', size);
   svg.setAttribute('height', size);
-  svg.setAttribute('shape-rendering', 'crispEdges');
-  const background = document.createElementNS(ns, 'rect');
-  background.setAttribute('width', total);
-  background.setAttribute('height', total);
-  background.setAttribute('fill', checkColour(state.style.light));
-  const path = document.createElementNS(ns, 'path');
-  path.setAttribute('d', modulePath(code, state.style.quiet, state.style.rounded));
-  path.setAttribute('fill', checkColour(state.style.dark));
-  svg.append(background, path);
-  if (state.logo) {
-    const side = code.size * state.style.logoFraction;
-    const at = (total - side) / 2;
-    const pad = document.createElementNS(ns, 'rect');
-    for (const [k, v] of [['x', at], ['y', at], ['width', side], ['height', side], ['fill', checkColour(state.style.light)]])
-      pad.setAttribute(k, v);
-    const image = document.createElementNS(ns, 'image');
-    for (const [k, v] of [['href', state.logo.dataUrl], ['x', at], ['y', at], ['width', side], ['height', side], ['preserveAspectRatio', 'xMidYMid meet']])
-      image.setAttribute(k, v);
-    svg.append(pad, image);
-  }
   area.append(svg);
   if (state.style.caption) {
     const caption = document.createElement('p');

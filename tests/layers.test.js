@@ -236,3 +236,22 @@ test('the PBM helper still round-trips a styled code', { skip: !has('zbarimg') &
   writeFileSync(file, toPbm(code));
   assert.equal(execFileSync('zbarimg', ['-q', '--raw', file]).toString().trim(), 'WIFI:T:WPA;S:Guest;P:secret;;');
 });
+
+test('logo box snaps to the grid and the pad shapes are paths', async () => {
+  const { logoBox, padPath, imageRect, SHAPES } = await import('../site/js/render/logo.js');
+  const code = encode('https://example.com/', { ecLevel: 'H' });
+  const box = logoBox(code, 4, 0.2);
+  assert.equal((code.size - box.side) % 2, 0);
+  assert.equal(box.x, 4 + (code.size - box.side) / 2);
+  assert.ok(box.side >= 3);
+  assert.equal(logoBox(code, 0, 0.3).side <= code.size - 16, true);
+  for (const shape of SHAPES)
+    assert.equal(typeof padPath(box, shape), 'string');
+  assert.equal(padPath(box, 'none'), '');
+  assert.match(padPath(box, 'circle'), /^M[\d.]+ [\d.]+a/);
+  const rect = imageRect(box);
+  assert.ok(rect.x > box.x && rect.size < box.side);
+  const svg = toSvg(code, { logo: { dataUrl: 'data:image/png;base64,AA==', fraction: 0.2, shape: 'rounded' } });
+  assert.ok(svg.includes('<image href="data:image/png;base64,AA=="'));
+  assert.ok(svg.includes('<path d="M'));
+});

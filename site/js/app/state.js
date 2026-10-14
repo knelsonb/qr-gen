@@ -34,6 +34,7 @@ export const STYLE = {
   physical: { number: [5, 2000] },
   caption: S,
   logoFraction: { number: [0.1, 0.3] },
+  logoShape: ['square', 'rounded', 'circle', 'none'],
   invertedOk: B,
   eci: B,
   boost: B,
@@ -55,7 +56,7 @@ export function defaultState() {
     fields,
     style: {
       ecLevel: 'M', quiet: 4, dark: '#000000', light: '#ffffff', rounded: false,
-      size: 1024, unit: 'px', physical: 50, caption: '', logoFraction: 0.2,
+      size: 1024, unit: 'px', physical: 50, caption: '', logoFraction: 0.2, logoShape: 'square',
       invertedOk: false, eci: false, boost: true,
     },
   };
