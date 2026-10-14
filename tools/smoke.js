@@ -96,7 +96,8 @@ await new Promise(r => setTimeout(r, 800));
 
 // A link.
 await setInput('f-url', 'example.com/menu');
-assert.match(await text('stats'), /^Version \d+ · \d+×\d+ modules · \d+ of \d+ bytes · \w+ correction$/);
+assert.match(await text('stats'), /^(Small|Medium|Dense) code: \d+ × \d+ squares\./);
+assert.match(await text('size-why'), /Version \d+, \d+ of \d+ bytes used at \w+ correction/);
 assert.equal(await text('scan-overall'), 'Good');
 assert.equal(await text('payload'), 'https://example.com/menu');
 assert.equal(await run("document.getElementById('preview').hidden"), false);
@@ -134,11 +135,12 @@ assert.equal(await text('scan-overall'), 'Poor');
 await setInput('s-quiet', '4');
 assert.equal(await text('scan-overall'), 'Good');
 
-// Print width in mm feeds the print-size factor.
-await setInput('s-unit', 'mm');
+// Print width feeds the print-size factor and the print button's label.
 await setInput('s-physical', '10');
-assert.match(await text('scan-factors'), /Print size: Modules of/);
-await setInput('s-unit', 'px');
+assert.match(await text('scan-factors'), /Print size: squares of/);
+assert.match(await text('print'), /Print guest card \(10 mm wide\)/);
+await setInput('s-physical', '50');
+assert.match(await text('scan-factors'), /Print size: each square prints/);
 
 // Too much text.
 await click('input[name="type"][value="text"]');
@@ -153,7 +155,8 @@ await click('[data-icon="wifi"]');
 assert.equal(await run("document.getElementById('logo-clear').hidden"), false);
 assert.match(await text('logo-current'), /Wi-Fi icon/);
 assert.match(await text('scan-factors'), /Logo:/);
-assert.match(await text('stats'), /High correction/);
+assert.match(await text('size-why'), /High correction \(High because of the logo\)/);
+assert.equal(await run("document.querySelector('[data-icon=\"wifi\"]').getAttribute('aria-pressed')"), 'true');
 await setInput('logo-text', 'MENU');
 await click('#logo-text-use');
 await new Promise(r => setTimeout(r, 300));
@@ -208,6 +211,15 @@ assert.equal(await run("document.getElementById('s-ecLevel').value"), 'M');
 assert.equal(await run("document.getElementById('f-ssid').value"), '');
 await setInput('s-ecLevel', 'Q');
 await setInput('s-caption', 'not kept');
+// A pasted Wi-Fi string offers to fill the form.
+await run("(() => { const el = document.getElementById('f-url'); const e = new Event('paste', { bubbles: true }); e.clipboardData = { getData: () => 'WIFI:T:WPA;S:Caf\\u00e9 Guest;P:pass\\\\;word;H:true;;' }; el.dispatchEvent(e); })()");
+assert.equal(await run("document.getElementById('switch-hint').hidden"), false);
+assert.match(await text('switch-type'), /Wi-Fi code for the network "Café Guest"/);
+await click('#switch-type');
+assert.equal(await run("document.getElementById('f-ssid').value"), 'Café Guest');
+assert.equal(await run("document.getElementById('f-password').value"), 'pass;word');
+assert.equal(await run("document.querySelector('[data-field=\"hidden\"]').checked"), true);
+await click('input[name="type"][value="url"]');
 await send('Page.navigate', { url: 'about:blank' });
 await send('Page.navigate', { url: SITE });
 await new Promise(r => setTimeout(r, 800));
@@ -216,7 +228,7 @@ assert.equal(await run("document.getElementById('s-caption').value"), '');
 await click('#forget');
 assert.equal(await run("document.getElementById('s-ecLevel').value"), 'M');
 assert.equal(await run("localStorage.getItem('qr-settings')"), null);
-assert.match(await text('count-line'), /^\d+ CODES MADE HERE/);
+assert.match(await text('count-line'), /NOTHING SAVED HERE YET/);
 await setInput('f-url', 'https://example.com/custom');
 await setInput('custom-size', '300');
 await click('#download-custom');

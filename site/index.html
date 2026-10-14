@@ -22,7 +22,7 @@
   <header class="titlebar">
     <a class="brand" href="https://www.thetallkeith.com/">The Tall Keith</a>
     <span>QR</span>
-    <span class="state" id="state-count">CODES MADE HERE: 0</span>
+    <span class="state" id="state-count">CODES SAVED HERE: 0</span>
   </header>
   <div class="menubar">
     <span class="selected">QR Code Generator</span>
@@ -31,7 +31,7 @@
   </div>
 
   <div id="link-banner" class="banner" hidden>
-    <p>This link carries content for the form. Check it before you use the code.</p>
+    <p id="link-banner-text">This link carries content for the form. Check it before you use the code.</p>
     <button type="button" id="load-link">Load content from link</button>
     <button type="button" id="ignore-link" class="quiet">Ignore</button>
   </div>
@@ -74,8 +74,8 @@
             <input id="f-ssid" data-field="ssid" type="text" spellcheck="false">
             <label for="f-password">Password</label>
             <div class="row">
-              <input id="f-password" data-field="password" type="password" spellcheck="false">
-              <button type="button" id="show-password" class="secondary" aria-pressed="false">Show</button>
+              <input id="f-password" data-field="password" type="text" spellcheck="false" autocapitalize="off">
+              <button type="button" id="show-password" class="secondary" aria-pressed="true">Hide</button>
             </div>
             <label for="f-security">Security</label>
             <select id="f-security" data-field="security">
@@ -142,6 +142,7 @@
               <div><label for="f-lat">Latitude</label><input id="f-lat" data-field="lat" type="text" inputmode="decimal" placeholder="51.5007"></div>
               <div><label for="f-lng">Longitude</label><input id="f-lng" data-field="lng" type="text" inputmode="decimal" placeholder="-0.1246"></div>
             </div>
+            <p class="hint">In a maps app, press and hold a spot to copy its coordinates.</p>
             <label for="f-format">Open as</label>
             <select id="f-format" data-field="format">
               <option value="maps">Maps link (works on most phones)</option>
@@ -154,11 +155,11 @@
             <select id="f-coin" data-field="coin"><option value="bitcoin">Bitcoin</option><option value="ethereum">Ethereum</option></select>
             <label for="f-address">Address</label><input id="f-address" data-field="address" type="text" spellcheck="false">
             <p id="address-echo" class="hint mono"></p>
-            <label for="f-amount">Amount (optional)</label><input id="f-amount" data-field="amount" type="text" inputmode="decimal">
+            <label for="f-amount">Amount (optional, in BTC or ETH)</label><input id="f-amount" data-field="amount" type="text" inputmode="decimal">
           </fieldset>
 
           <label for="s-caption">Caption under the code (optional)</label>
-          <input id="s-caption" data-style="caption" type="text" placeholder="Scan for the guest Wi‑Fi">
+          <input id="s-caption" data-style="caption" type="text" placeholder="Scan for our menu">
         </form>
       </div>
     </section>
@@ -171,8 +172,8 @@
         <figcaption id="caption-out"></figcaption>
       </figure>
       <div class="pane-body">
-        <p id="stats" class="stats" aria-live="polite"></p>
-        <p id="size-why" class="stats"></p>
+        <p id="stats" class="stats"></p>
+        <details class="why" id="why-size"><summary>Why this size?</summary><p id="size-why" class="stats"></p></details>
         <p id="error" class="error" role="alert"></p>
         <div class="meter">
           <h3>Will it scan? <span id="scan-overall" class="rating"></span></h3>
@@ -190,6 +191,16 @@
     <section class="pane pane-take" aria-labelledby="take-title">
       <div class="pane-title"><h2 id="take-title">TAKE IT WITH YOU</h2><span>03</span></div>
       <div class="pane-body">
+        <p id="take-empty" class="hint">Type something in 01 to make a code.</p>
+        <p class="label-line">PRINT WIDTH</p>
+        <div class="row">
+          <input id="s-physical" data-style="physical" type="number" min="5" max="2000" step="1" value="50" aria-label="Print width">
+          <select id="s-unit" data-style="unit" aria-label="Unit">
+            <option value="mm">mm</option>
+            <option value="in">inches</option>
+          </select>
+        </div>
+        <p class="hint">Goes into the PNG and SVG as their print size, and the meter below the code checks the squares come out big enough. Rule of thumb: a code should be at least a tenth as wide as the distance it is scanned from.</p>
         <p class="label-line">PNG</p>
         <div class="row sizes">
           <button type="button" data-png-size="512">512 px</button>
@@ -203,14 +214,15 @@
             <button type="button" id="download-custom">Download</button>
           </span>
         </div>
-        <p class="hint">Whole pixels per module, so the file comes out at or just under the size you ask for.</p>
+        <p class="hint">For print, 1024 px stays sharp up to about 8 cm (3 in) wide and 2048 px up to about 17 cm (7 in). Bigger than that, use SVG.</p>
         <p class="label-line">ALSO</p>
         <div class="row">
           <button type="button" id="download-svg">SVG</button>
           <button type="button" id="copy-image">Copy image</button>
           <button type="button" id="share" hidden>Share</button>
-          <button type="button" id="print">Print at real size</button>
+          <button type="button" id="print">Print</button>
         </div>
+        <p id="take-status" class="hint" aria-live="polite"></p>
       </div>
     </section>
 
@@ -218,28 +230,8 @@
       <details id="more-panel">
         <summary class="pane-title"><h2 id="more-title">MORE OPTIONS</h2><span class="disclosure">04 <span aria-hidden="true">▸</span></span></summary>
         <div class="pane-body">
-          <h3>Error correction</h3>
-          <label for="s-ecLevel" class="sr-only">Error correction level</label>
-          <select id="s-ecLevel" data-style="ecLevel">
-            <option value="L">Low: smallest code, keep it clean</option>
-            <option value="M">Medium: the everyday default</option>
-            <option value="Q">Quartile: stickers and outdoors</option>
-            <option value="H">High: survives scuffs, or a logo</option>
-          </select>
-          <label class="check"><input type="checkbox" data-style="boost" checked> Use a higher level when the code has room for it</label>
-
-          <h3>Looks</h3>
-          <div class="grid2">
-            <div><label for="s-dark">Modules</label><input id="s-dark" data-style="dark" type="color" value="#000000"></div>
-            <div><label for="s-light">Background</label><input id="s-light" data-style="light" type="color" value="#ffffff"></div>
-          </div>
-          <label class="check"><input type="checkbox" data-style="invertedOk"> My readers handle light modules on a dark background</label>
-          <label for="s-quiet">Blank border: <output id="quiet-out">4</output> modules</label>
-          <input id="s-quiet" data-style="quiet" type="range" min="0" max="8" value="4">
-          <label class="check"><input type="checkbox" data-style="rounded"> Rounded modules (the corner squares stay square)</label>
-
           <h3>Logo in the middle</h3>
-          <p class="hint">A logo hides part of the code, so error correction goes to High while one is set, and the pad behind it snaps to the module grid. Test with a phone before printing.</p>
+          <p class="hint">A logo covers part of the code, so error correction is set to High while one is on, and the pad behind it snaps to the grid of squares. Scan it with a phone before printing.</p>
           <p class="label-line">AN ICON</p>
           <div class="row icons" id="icon-row">
             <button type="button" class="icon" data-icon="link" aria-label="Link icon" title="Link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg></button>
@@ -262,7 +254,7 @@
           </div>
           <p class="label-line">OR YOUR OWN IMAGE</p>
           <input id="logo-file" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" aria-label="Logo image file">
-          <p class="hint">PNG, JPEG, WebP or SVG, up to 2 MB. The image is redrawn, so nothing else in the file reaches the code.</p>
+          <p class="hint">PNG, JPEG, WebP or SVG, up to 2 MB. The image is redrawn, so hidden details such as a photo's location are removed.</p>
           <div class="grid2">
             <div>
               <label for="s-logoShape">Pad behind the logo</label>
@@ -270,7 +262,7 @@
                 <option value="square">Square</option>
                 <option value="rounded">Rounded</option>
                 <option value="circle">Circle</option>
-                <option value="none">None, modules show through</option>
+                <option value="none">None, squares show through</option>
               </select>
             </div>
             <div>
@@ -284,17 +276,14 @@
           </div>
           <p id="logo-error" class="error" role="alert"></p>
 
-          <h3>Print size</h3>
-          <div class="row">
-            <label for="s-physical" class="inline">Width</label>
-            <input id="s-physical" data-style="physical" type="number" min="5" max="2000" step="1" value="50">
-            <select id="s-unit" data-style="unit" aria-label="Unit">
-              <option value="px">just pixels</option>
-              <option value="mm">mm</option>
-              <option value="in">inches</option>
-            </select>
+          <h3>Colours and border</h3>
+          <div class="grid2">
+            <div><label for="s-dark">Code colour</label><input id="s-dark" data-style="dark" type="color" value="#000000"></div>
+            <div><label for="s-light">Background</label><input id="s-light" data-style="light" type="color" value="#ffffff"></div>
           </div>
-          <p class="hint">Rule of thumb: a code should be at least a tenth as wide as the distance it is scanned from. The width goes into the PNG as its print size and into the SVG.</p>
+          <label for="s-quiet">Blank border: <output id="quiet-out">4</output> squares</label>
+          <input id="s-quiet" data-style="quiet" type="range" min="0" max="8" value="4">
+          <label class="check"><input type="checkbox" data-style="rounded"> Rounded squares (the corner markers stay square)</label>
 
           <h3>Batch: many codes at once</h3>
           <p class="hint">One code per line, each line used exactly as written (so a Wi‑Fi line starts with WIFI:). Up to 200. The files are named after the start of each line.</p>
@@ -305,13 +294,24 @@
           </div>
           <p id="batch-status" class="hint" aria-live="polite"></p>
 
-          <h3>Other ways out</h3>
+          <h3>Share these settings</h3>
           <div class="row">
-            <button type="button" id="copy-text">Copy as text blocks</button>
             <button type="button" id="copy-link">Copy a link to these settings</button>
+            <button type="button" id="copy-text">Copy as text art (for chat or a terminal)</button>
           </div>
           <label class="check"><input type="checkbox" id="link-content"> Include the content in the link (anyone with the link sees it)</label>
           <p id="link-status" class="hint" aria-live="polite"></p>
+
+          <h3>Advanced</h3>
+          <label for="s-ecLevel">Error correction</label>
+          <select id="s-ecLevel" data-style="ecLevel">
+            <option value="L">Low: smallest code, keep it clean</option>
+            <option value="M">Medium: the everyday default</option>
+            <option value="Q">Quartile: stickers and outdoors</option>
+            <option value="H">High: survives scuffs, or a logo</option>
+          </select>
+          <label class="check"><input type="checkbox" data-style="boost" checked> Raise error correction when it does not make the code bigger</label>
+          <label class="check"><input type="checkbox" data-style="invertedOk"> Allow light on dark (some phone cameras cannot read it)</label>
           <label class="check"><input type="checkbox" data-style="eci"> Mark the text as UTF‑8 (ECI). Only for readers that get accents wrong.</label>
         </div>
       </details>
@@ -321,7 +321,7 @@
   <footer>
     <span>QR.THETALLKEITH.COM</span>
     <span>NOTHING LEAVES THIS DEVICE</span>
-    <span id="count-line">NO CODES MADE HERE YET</span>
+    <span id="count-line">NOTHING SAVED HERE YET</span>
     <span class="footer-right"><button type="button" id="about-open" class="link">ABOUT</button></span>
   </footer>
 </div>
@@ -332,7 +332,7 @@
   <p>Cloudflare, which fronts this site, and the server behind it see ordinary connection logs when you load the page, like any website. Your style settings, colours, border and the like, are kept on this device once you change them so they are there next time, and so is the count of codes you have made here. The content of a code and its caption are never kept, though both go into a settings link if you ask for the content to be included. <button type="button" id="forget" class="link">Forget my settings</button>.</p>
   <p>Links with settings in them can pre-fill this page, so look at what the code contains before you print or share it. The page warns about link shapes that are commonly abused, but a warning is a hint and does not prove a link safe.</p>
   <p>A printed code is permanent. This page makes plain codes that hold their content directly, so there is nothing to expire and no one is told when it is scanned.</p>
-  <p>Keyboard: Ctrl+S saves a PNG, Ctrl+P prints, Ctrl+Shift+C copies the image.</p>
+  <p>Keyboard: Ctrl+S (⌘S on a Mac) saves a PNG at the last size you picked, Ctrl+P prints, Ctrl+Shift+C copies the image.</p>
   <p>The source is short and public: <a href="https://github.com/knelsonb/qr-gen" rel="noopener">github.com/knelsonb/qr-gen</a>. To report a vulnerability, see <a href="/.well-known/security.txt">security.txt</a>.</p>
 </details>
 
@@ -341,7 +341,7 @@
 <div class="toolbar" id="toolbar">
   <button type="button" id="bar-share" hidden>Share</button>
   <button type="button" id="bar-save">Save PNG</button>
-  <button type="button" id="bar-top">Edit</button>
+  <button type="button" id="bar-top">See code</button>
 </div>
 
 <p id="announce" class="sr-only" aria-live="polite"></p>

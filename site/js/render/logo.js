@@ -52,11 +52,23 @@ export function drawPad(ctx, box, shape, scale, colour) {
   const side = box.side * scale;
   if (shape === 'circle')
     ctx.arc(x + side / 2, y + side / 2, side / 2, 0, Math.PI * 2);
-  else if (shape === 'rounded')
+  else if (shape === 'rounded' && typeof ctx.roundRect === 'function')
     ctx.roundRect(x, y, side, side, side * 0.2);
+  else if (shape === 'rounded')
+    roundedRect(ctx, x, y, side, side * 0.2);
   else
     ctx.rect(x, y, side, side);
   ctx.fill();
+}
+
+// For browsers from before roundRect existed.
+function roundedRect(ctx, x, y, side, r) {
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + side, y, x + side, y + side, r);
+  ctx.arcTo(x + side, y + side, x, y + side, r);
+  ctx.arcTo(x, y + side, x, y, r);
+  ctx.arcTo(x, y, x + side, y, r);
+  ctx.closePath();
 }
 
 // Fits an image inside the box, centred, and returns the pixel rect it was drawn in.

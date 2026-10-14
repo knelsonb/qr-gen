@@ -30,7 +30,7 @@ export const STYLE = {
   light: 'colour',
   rounded: B,
   size: { int: [64, 4096] },
-  unit: ['px', 'mm', 'in'],
+  unit: ['mm', 'in'],
   physical: { number: [5, 2000] },
   caption: S,
   logoFraction: { number: [0.1, 0.3] },
@@ -56,7 +56,7 @@ export function defaultState() {
     fields,
     style: {
       ecLevel: 'M', quiet: 4, dark: '#000000', light: '#ffffff', rounded: false,
-      size: 1024, unit: 'px', physical: 50, caption: '', logoFraction: 0.2, logoShape: 'square',
+      size: 1024, unit: 'mm', physical: 50, caption: '', logoFraction: 0.2, logoShape: 'square',
       invertedOk: false, eci: false, boost: true,
     },
   };

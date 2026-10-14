@@ -5,7 +5,7 @@ import { encode, CapacityError, capacityBits, dataCodewords, EC_LEVELS } from '.
 import { drawCode } from '../render/canvas.js';
 import { build } from '../payload/builders.js';
 import { inspect, revealControls } from '../payload/inspect.js';
-import { STYLE, FIELDS, MAX_TEXT, coerce, applySettings, styleToJson } from './state.js';
+import { STYLE, FIELDS, MAX_TEXT, coerce, applySettings, styleToJson, defaultState } from './state.js';
 import { assess } from './scannability.js';
 import { logoBox } from '../render/logo.js';
 import { logoFromFile, logoFromIcon, logoFromText, recolourLogo, describeLogo } from './logo.js';
@@ -87,7 +87,10 @@ function showPayload(state, payload) {
     const start = shown.indexOf('://') + 3;
     const end = shown.slice(start).search(/[/?#]|$/) + start;
     const afterUser = shown.lastIndexOf('@', end) + 1;
-    at = shown.slice(0, end).toLowerCase().indexOf(host, Math.max(start, afterUser));
+    const authority = shown.slice(Math.max(start, afterUser), end);
+    const match = authority.match(new RegExp(host.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+    if (match)
+      at = Math.max(start, afterUser) + match.index;
   }
   if (at < 0) {
     pre.textContent = shown;
@@ -111,13 +114,14 @@ function smallestVersion(bits, level) {
 function showStats(state, code) {
   const used = Math.ceil(code.dataBits / 8);
   const room = code.capacityBits / 8;
-  const forced = state.logo && state.style.ecLevel !== 'H' ? ', forced by the logo' : '';
-  $('stats').textContent = `Version ${code.version} · ${code.size}×${code.size} modules · ${used} of ${room} bytes · ${LEVEL_NAMES[code.ecLevel]} correction${forced}`;
+  const kind = code.version <= 4 ? 'Small' : code.version <= 12 ? 'Medium' : 'Dense';
+  $('stats').textContent = `${kind} code: ${code.size} × ${code.size} squares. Shorter content makes a smaller code that scans from further away.`;
+  const forced = state.logo && state.style.ecLevel !== 'H' ? ' (High because of the logo)' : '';
   const byLevel = EC_LEVELS.map(level => {
     const v = smallestVersion(code.dataBits, level);
-    return `${level} ${v === null ? 'too long' : `${v * 4 + 17}×${v * 4 + 17}`}`;
+    return `${LEVEL_NAMES[level]} ${v === null ? 'too long' : `${v * 4 + 17} × ${v * 4 + 17}`}`;
   });
-  $('size-why').textContent = `Size by level: ${byLevel.join(' · ')}. Longer content or more correction adds 4 modules a side.`;
+  $('size-why').textContent = `Version ${code.version}, ${used} of ${room} bytes used at ${LEVEL_NAMES[code.ecLevel]} correction${forced}. The same content at each level: ${byLevel.join(' · ')}. Longer content or more correction adds 4 squares a side.`;
 }
 
 function capacityWarning(state, code, findings) {
@@ -223,6 +227,7 @@ export function render(state) {
     showScannability(state, code);
     selfCheck(payload);
   } else {
+    checks++;
     $('stats').textContent = '';
     $('size-why').textContent = '';
     $('scan-overall').textContent = '';
@@ -236,8 +241,23 @@ export function render(state) {
     li(list, finding.text, finding.level);
   showPayload(state, payload);
   for (const button of document.querySelectorAll('[data-png-size], #download-custom, #download-svg, #copy-image, #share, #print, #copy-text, #bar-save, #bar-share'))
-    button.disabled = code === null;
-  $('announce').textContent = code ? 'Code updated' : '';
+    if (!button.dataset.busy)
+      button.disabled = code === null;
+  $('take-empty').hidden = code !== null;
+  $('print').textContent = `${state.type === 'wifi' ? 'Print guest card' : 'Print'} (${state.style.physical} ${state.style.unit} wide)`;
+  announce(code ? $('scan-overall').textContent : '');
+}
+
+// Screen readers hear one line per pause in typing, with the rating when it changed.
+let announceTimer = 0;
+let lastRating = '';
+function announce(rating) {
+  clearTimeout(announceTimer);
+  announceTimer = setTimeout(() => {
+    const changed = rating !== lastRating;
+    lastRating = rating;
+    $('announce').textContent = rating === '' ? '' : `Code updated.${changed ? ` Will it scan: ${rating}.` : ''}`;
+  }, 800);
 }
 
 // What a control changes, as the word stamped on the code pane after each update.
@@ -313,7 +333,6 @@ function echoAddress(state) {
 }
 
 const READY_MADE = [
-  [/^WIFI:/i, 'Wi-Fi code'],
   [/^BEGIN:VCARD/i, 'contact card'],
   [/^MECARD:/i, 'contact card'],
   [/^BEGIN:VCALENDAR/i, 'calendar event'],
@@ -322,16 +341,46 @@ const READY_MADE = [
   [/^geo:/i, 'location'],
 ];
 
-// Pasting a finished payload into the link field offers to use it as-is, under Text, where
-// nothing is added to it.
+// The fields of a WIFI:T:..;S:..;P:..;H:..;; string, unescaped, or null.
+export function parseWifi(text) {
+  if (!/^WIFI:/i.test(text.trim()))
+    return null;
+  const fields = {};
+  const body = text.trim().slice(5);
+  for (const part of body.split(/(?<!\\);/)) {
+    const colon = part.indexOf(':');
+    if (colon > 0)
+      fields[part.slice(0, colon).toUpperCase()] = part.slice(colon + 1).replace(/\\(.)/g, '$1');
+  }
+  if (!fields.S)
+    return null;
+  const security = ['WEP', 'nopass'].includes(fields.T) ? fields.T : fields.T === undefined || fields.T === '' ? 'nopass' : 'WPA';
+  return { ssid: fields.S, password: fields.P ?? '', security, hidden: fields.H === 'true' };
+}
+
+// Pasting a finished payload offers to fill the matching form, or to use the text as-is under
+// Text, where nothing is added to it. Nothing changes until the offer is accepted.
 function offerSwitch(state, pasted) {
-  const match = READY_MADE.find(([pattern]) => pattern.test(pasted.trim()));
   const hint = $('switch-hint');
+  const button = $('switch-type');
+  const wifi = parseWifi(pasted);
+  if (wifi) {
+    button.textContent = `This is a Wi-Fi code for the network "${wifi.ssid}". Fill in the Wi-Fi form from it?`;
+    button.onclick = () => {
+      state.type = 'wifi';
+      Object.assign(state.fields.wifi, wifi);
+      hint.hidden = true;
+      sync(state);
+      render(state);
+    };
+    hint.hidden = false;
+    return;
+  }
+  const match = READY_MADE.find(([pattern]) => pattern.test(pasted.trim()));
   if (!match || state.type === 'text') {
     hint.hidden = true;
     return;
   }
-  const button = $('switch-type');
   button.textContent = `This looks like a ready-made ${match[1]}. Use it exactly as pasted?`;
   button.onclick = () => {
     state.type = 'text';
@@ -351,6 +400,11 @@ export function bind(state) {
       $('switch-hint').hidden = true;
       render(state);
       stamp('type');
+    });
+    // Arrow keys also fire click, with detail 0; only a pointer moves focus into the form.
+    radio.addEventListener('click', e => {
+      if (e.detail === 0)
+        return;
       const first = document.querySelector(`fieldset[data-type="${state.type}"] input, fieldset[data-type="${state.type}"] textarea`);
       if (first)
         first.focus();
@@ -368,7 +422,7 @@ export function bind(state) {
         echoAddress(state);
       scheduleRender(state, 'content');
     });
-    if (type === 'url' || type === 'text')
+    if (input.type !== 'checkbox')
       input.addEventListener('paste', e => offerSwitch(state, e.clipboardData.getData('text')));
   }
   for (const input of document.querySelectorAll('[data-style]')) {
@@ -386,6 +440,7 @@ export function bind(state) {
       scheduleRender(state, CHANGE_LABELS[name] ?? name);
     });
   }
+  // Shown by default: a typo is the usual reason a guest card fails.
   $('show-password').addEventListener('click', () => {
     const field = $('f-password');
     const show = field.type === 'password';
@@ -402,14 +457,23 @@ function setLogo(state, logo) {
   $('logo-error').textContent = '';
   if (logo === null || logo.kind !== 'file')
     $('logo-file').value = '';
+  for (const button of document.querySelectorAll('[data-icon]'))
+    button.setAttribute('aria-pressed', String(logo !== null && logo.kind === 'icon' && logo.value === button.dataset.icon));
   render(state);
   stamp('logo');
 }
 
+// Only the latest request lands, so a slow file decode cannot overwrite a later icon click.
+let logoRequest = 0;
 async function tryLogo(state, make) {
+  const request = ++logoRequest;
   try {
-    setLogo(state, await make());
+    const logo = await make();
+    if (request === logoRequest)
+      setLogo(state, logo);
   } catch (err) {
+    if (request !== logoRequest)
+      return;
     setLogo(state, null);
     $('logo-error').textContent = err.message;
   }
@@ -421,8 +485,10 @@ export function bindLogo(state) {
     if (file)
       tryLogo(state, () => logoFromFile(file));
   });
-  for (const button of document.querySelectorAll('[data-icon]'))
+  for (const button of document.querySelectorAll('[data-icon]')) {
+    button.setAttribute('aria-pressed', 'false');
     button.addEventListener('click', () => tryLogo(state, () => logoFromIcon(button.dataset.icon, state.style.dark)));
+  }
   $('logo-text-use').addEventListener('click', () => tryLogo(state, () => logoFromText($('logo-text').value, state.style.dark)));
   $('logo-text').addEventListener('keydown', e => {
     if (e.key === 'Enter') {
@@ -436,6 +502,8 @@ export function bindLogo(state) {
 // A link with content in it pre-fills nothing until the visitor asks.
 export function offerLinkContent(state, params) {
   const banner = $('link-banner');
+  const preview = applySettings(defaultState(), key => params.get(key), { content: true });
+  $('link-banner-text').textContent = `This link wants to fill in a ${describe(preview)}. Load it?`;
   banner.hidden = false;
   $('load-link').onclick = () => {
     applySettings(state, key => params.get(key), { content: true });

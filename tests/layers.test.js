@@ -255,3 +255,12 @@ test('logo box snaps to the grid and the pad shapes are paths', async () => {
   assert.ok(svg.includes('<image href="data:image/png;base64,AA=="'));
   assert.ok(svg.includes('<path d="M'));
 });
+
+test('a pasted WIFI: string is parsed into the form fields', async () => {
+  const { parseWifi } = await import('../site/js/app/ui.js');
+  const wifi = parseWifi(['WIFI:T:WPA;S:Caf\u00e9 Guest;P:pass', String.fromCharCode(92), ';word;H:true;;'].join(''));
+  assert.deepEqual(wifi, { ssid: 'Café Guest', password: 'pass;word', security: 'WPA', hidden: true });
+  assert.deepEqual(parseWifi('WIFI:S:Open;T:nopass;;'), { ssid: 'Open', password: '', security: 'nopass', hidden: false });
+  assert.equal(parseWifi('https://example.com'), null);
+  assert.equal(parseWifi('WIFI:T:WPA;;'), null);
+});

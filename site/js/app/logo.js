@@ -133,7 +133,7 @@ export function logoFromIcon(name, colour) {
 const FONT = "'Brewster Technical', system-ui, sans-serif";
 
 export async function logoFromText(text, colour) {
-  const letters = text.trim().slice(0, MAX_TEXT);
+  const letters = Array.from(text.trim()).slice(0, MAX_TEXT).join('');
   if (letters === '')
     throw new Error('Type a few letters first.');
   try {
