@@ -3,7 +3,7 @@ import { bind, bindLogo, sync, render, offerLinkContent } from './ui.js';
 import { bindActions } from './actions.js';
 import { showCount } from './counter.js';
 
-export const VERSION = '1.0.0';
+export const VERSION = '1.1.0';
 
 const state = defaultState();
 state.logo = null;

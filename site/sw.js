@@ -1,7 +1,7 @@
 // Offline support: the handful of files the page is made of, cached on install. The version
 // below must match VERSION in js/app/main.js; a test checks that. Old caches go on activate.
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const CACHE = `qr-${VERSION}`;
 const FILES = [
   './',
@@ -11,8 +11,8 @@ const FILES = [
   'manifest.webmanifest',
   'icon-192.png',
   'icon-512.png',
-  'fonts/BrewsterTechnical-Regular.ttf',
-  'fonts/BrewsterTechnicalMono-Regular.ttf',
+  'fonts/BrewsterTechnical-Regular.woff2',
+  'fonts/BrewsterTechnicalMono-Regular.woff2',
   'js/app/main.js',
   'js/app/counter.js',
   'js/app/ui.js',
