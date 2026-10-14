@@ -7,7 +7,7 @@ Cloudflare and the zone settings at the bottom.
 
 Static files on Cloudflare's edge, no server to keep up, `_headers` honoured, deploys on push.
 
-1. Push this repo to GitHub (public is fine; the page links to it).
+1. The repo is at github.com/knelsonb/qr-gen (public; the page links to it).
 2. Cloudflare dashboard: Workers & Pages, Create, Pages, Connect to Git, pick the repo.
    Production branch `main`, framework None, build command empty, build output directory `site`.
    No `package.json` exists, so nothing is installed.
@@ -22,7 +22,7 @@ The pattern CT 101 already uses for hotspades.com, in its own small container.
 
 1. On pve, a Debian LXC (256 MB, 2 GB disk, unprivileged) named `qr`. Inside:
    `apt install nginx git`.
-2. `git clone` this repo to `/srv/qr` and copy `deploy/nginx-qr.conf` to
+2. `git clone https://github.com/knelsonb/qr-gen /srv/qr` and copy `deploy/nginx-qr.conf` to
    `/etc/nginx/sites-available/qr`, link it into `sites-enabled`, remove `default`,
    `nginx -t && systemctl reload nginx`. `curl -sI http://localhost/ | grep -i content-security`
    shows the policy.
