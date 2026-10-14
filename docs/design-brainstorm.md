@@ -1,5 +1,11 @@
 # QR generator: design brainstorm
 
+The design as it stood before building, 2026-10-13. Where README.md or deploy/README.md disagree
+with this document, they are current and this is history: the site is hosted on a pve container
+behind a Cloudflare tunnel rather than Pages, SVG logos are accepted (rasterised through an
+image element), the page weighs about 150 KB on the wire with its own fonts, and the CSP has
+`font-src` and no `blob:`.
+
 Pre-implementation review, 2026-10-13, four views (user, security, architecture, performance)
 merged into one set of decisions. The product: a free, public QR code generator at
 qr.thetallkeith.com. Static site, zero dependencies, no build step, everything in the browser.
