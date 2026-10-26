@@ -13,7 +13,6 @@ previous=/tmp/qr.conf.previous
 cp /etc/nginx/sites-available/qr "$previous" 2>/dev/null || true
 install -m 644 deploy/nginx-qr.conf /etc/nginx/sites-available/qr
 ln -sfn ../sites-available/qr /etc/nginx/sites-enabled/qr
-rm -f /etc/nginx/sites-enabled/default
 if ! nginx -t; then
   echo "nginx config rejected; restoring the previous one" >&2
   [ -f "$previous" ] && install -m 644 "$previous" /etc/nginx/sites-available/qr

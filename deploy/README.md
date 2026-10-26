@@ -19,28 +19,29 @@ Static files on Cloudflare's edge, no server to keep up, `_headers` honoured, de
 
 ## Route B: pve LXC behind a Cloudflare Tunnel (what runs now)
 
-CT 120 `qr` on pve: Debian 13, unprivileged, 1 core, 256 MB of RAM, a 2 GB disk, DHCP on
-vmbr0, starts with the host. Inside it nginx serves `/srv/qr/site` through `deploy/nginx-qr.conf`, and
-cloudflared runs a locally managed tunnel named `qr-pve` as a systemd service.
+CT 117 `thetallkeith` on pve, which also serves thetallkeith.com's other sites (qr moved in from its
+own CT 120 on 2026-10-26). Inside it nginx serves `/srv/qr/site` on `127.0.0.1:8085` through
+`deploy/nginx-qr.conf`, and cloudflared runs a locally managed tunnel named `qr-pve` as
+`qr-tunnel.service`, separate from the container's `thetallkeith-tunnel.service`.
 
-- Tunnel config: `/etc/cloudflared/config.yml` (one ingress rule, `qr.thetallkeith.com` to
-  `http://localhost:80`, everything else 404).
+- Tunnel config: `/etc/cloudflared-qr/config.yml` (one ingress rule, `qr.thetallkeith.com` to
+  `http://127.0.0.1:8085`, everything else 404).
 - DNS: the proxied CNAME `qr` was written by `cloudflared tunnel route dns`.
 - Update the site: on pve, from a checkout of this repo, `deploy/pull.sh` (or
   `deploy/pull.sh <commit>` to roll back). It fast-forwards the container's checkout, stamps
   the service worker and app with the commit so returning visitors install the new version as
   one set, installs the nginx config only if `nginx -t` passes, reloads, and runs the live check.
-- Tunnel credentials: `/etc/cloudflared/<tunnel-id>.json`, mode 600. The account certificate
+- Tunnel credentials: `/etc/cloudflared-qr/<tunnel-id>.json`, mode 600. The account certificate
   that `cloudflared tunnel login` writes to `/root/.cloudflared/cert.pem` was deleted once the
   tunnel and its DNS record existed; it can create tunnels and records for the whole zone and
   the running tunnel does not need it. Re-run `login` only for admin changes.
-- Health: `pct exec 120 -- cloudflared tunnel info qr-pve`, or the Tunnels page in Zero Trust.
-- If the container is ever rebuilt: `apt install nginx git cloudflared` (Cloudflare's apt repo,
+- Health: `pct exec 117 -- cloudflared tunnel info qr-pve`, or the Tunnels page in Zero Trust.
+- If the setup is ever rebuilt: `apt install nginx git cloudflared` (Cloudflare's apt repo,
   key at `/usr/share/keyrings/cloudflare-main.gpg`), `git clone
-  https://github.com/knelsonb/qr-gen /srv/qr`, `rm /etc/nginx/sites-enabled/default`, run
-  `deploy/inside.sh`, then `cloudflared tunnel login` and authorise the zone in a browser,
-  `tunnel create`, the config above, `tunnel route dns`, `service install`, and delete
-  `cert.pem`.
+  https://github.com/knelsonb/qr-gen /srv/qr`, run `deploy/inside.sh`, then `cloudflared tunnel
+  login` and authorise the zone in a browser, `tunnel create`, the config above, `tunnel route
+  dns`, a `qr-tunnel.service` unit running `cloudflared --no-autoupdate --config
+  /etc/cloudflared-qr/config.yml tunnel run`, and delete `cert.pem`.
 - Web Analytics: the zone's Web Analytics site has automatic setup on, which injects
   Cloudflare's beacon script into HTML for every hostname in the zone, this one included. The
   CSP blocks it from running, and the live smoke test flags the attempt. Turning it off is a
