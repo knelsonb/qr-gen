@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-CT=120
+CT=117
 REF=${1:-origin/main}
 
 pct exec "$CT" -- git -C /srv/qr checkout -q -- site/sw.js site/js/app/main.js
